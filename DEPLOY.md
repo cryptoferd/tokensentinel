@@ -2,7 +2,7 @@
 
 The repository is already split for the intended production layout:
 
-- **Railway:** persistent scanner, SQLite database, REST API and live SSE stream
+- **Railway:** on-demand timed scanner, SQLite database, REST API and live SSE stream
 - **Vercel:** static React/Vite dashboard
 
 No private key or wallet seed is required anywhere.
@@ -24,6 +24,7 @@ Create an empty GitHub repository and upload the contents of this project so tha
    CHAIN_ID=4663
    CORS_ORIGINS=https://*.vercel.app
    START_BLOCK=latest
+   SCANNER_AUTO_START=false
    ```
 
    Do not define `PORT`; Railway supplies it automatically. `DB_PATH` can also
@@ -35,10 +36,13 @@ Create an empty GitHub repository and upload the contents of this project so tha
    redeployments.
 5. Under **Networking**, generate a public Railway domain.
 6. Confirm `https://YOUR-RAILWAY-DOMAIN/health` returns JSON with `"ok": true`.
+7. In the service's **Deploy** settings, enable **Serverless** so the API can
+   sleep after the dashboard is closed and no scan session is active.
 
-For sustained production scanning, replace the public `RPC_URL` with a dedicated
-Robinhood Chain RPC endpoint. The remaining chain and Blockscout defaults are
-already built in.
+The dashboard starts live monitoring only when you choose a 5–60 minute duration
+and press **Start Scan**. Each session begins at the current chain tip and stops
+automatically. For frequent one-hour sessions, replace the public `RPC_URL` with
+a dedicated Robinhood Chain endpoint.
 
 ## 3. Deploy the dashboard to Vercel
 

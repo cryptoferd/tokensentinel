@@ -5,7 +5,7 @@ import { events } from '../events.js';
 import { getToken, listTokens, stats } from '../db/repository.js';
 import { client } from '../chain/client.js';
 import { enqueueAnalysis, queueDepth } from '../workers/analysisQueue.js';
-import { scannerStatus } from '../workers/blockScanner.js';
+import { runScanner, scannerStatus, stopScanner } from '../workers/blockScanner.js';
 
 export function createServer() {
   const app = express();
@@ -27,10 +27,23 @@ export function createServer() {
   app.post('/api/tokens/:address/rescan', (req,res) => {
     const token = getToken(req.params.address); if (!token) return res.status(404).json({ error:'Token not found' }); enqueueAnalysis(token.address); res.status(202).json({ queued:true });
   });
+  app.post('/api/scanner/start', (req,res) => {
+    const durationMinutes = Number(req.body?.durationMinutes);
+    if (!Number.isInteger(durationMinutes) || durationMinutes < 5 || durationMinutes > 60) {
+      return res.status(400).json({ error:'durationMinutes must be a whole number from 5 to 60' });
+    }
+    if (scannerStatus().running) return res.status(409).json({ error:'Scanner is already running', ...scannerStatus() });
+    void runScanner({ durationMinutes, fromLatest:true }).catch(error => console.error('[scanner] session failed:', error));
+    res.status(202).json({ started:true, ...scannerStatus() });
+  });
+  app.post('/api/scanner/stop', (_req,res) => {
+    const stopping = stopScanner();
+    res.status(stopping ? 202 : 200).json({ stopping, ...scannerStatus() });
+  });
   app.get('/api/stats', async (_req,res) => {
     const s = stats(); const scanner = scannerStatus();
     let latestBlock = scanner.latestKnown; try { latestBlock = Number(await client.getBlockNumber()); } catch {}
-    res.json({ ...s, latestBlock, scannedBlock:scanner.scanned, scannerRunning:scanner.running, queueDepth:queueDepth() });
+    res.json({ ...s, latestBlock, scannedBlock:scanner.scanned, scannerRunning:scanner.running, scannerStartedAt:scanner.startedAt, scannerEndsAt:scanner.endsAt, queueDepth:queueDepth() });
   });
   app.get('/api/stream', (req,res) => {
     res.setHeader('Content-Type','text/event-stream'); res.setHeader('Cache-Control','no-cache'); res.setHeader('Connection','keep-alive'); res.flushHeaders();

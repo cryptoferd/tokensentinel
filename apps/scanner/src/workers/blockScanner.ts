@@ -9,14 +9,31 @@ import { publish } from '../events.js';
 let running = false;
 let stopRequested = false;
 let latestKnown = 0n;
+let startedAt: number | null = null;
+let endsAt: number | null = null;
 
-export function scannerStatus() { return { running, latestKnown:Number(latestKnown), scanned:Number(getState('last_scanned_block') ?? 0) }; }
-export function stopScanner() { stopRequested = true; }
+export function scannerStatus() {
+  return {
+    running,
+    latestKnown:Number(latestKnown),
+    scanned:Number(getState('last_scanned_block') ?? 0),
+    startedAt,
+    endsAt
+  };
+}
+export function stopScanner() {
+  if (!running) return false;
+  stopRequested = true;
+  publish('scanner:status', { running:false, startedAt, endsAt, stopping:true });
+  return true;
+}
 
-async function initialBlock() {
+async function initialBlock(fromLatest: boolean) {
+  const latest = await client.getBlockNumber();
+  latestKnown = latest;
+  if (fromLatest) return latest;
   const saved = getState('last_scanned_block');
   if (saved) return BigInt(saved) + 1n;
-  const latest = await client.getBlockNumber();
   if (config.START_BLOCK === 'latest') return latest;
   const requested = BigInt(config.START_BLOCK);
   return requested > latest ? latest : requested;
@@ -51,24 +68,38 @@ async function scanOne(blockNumber: bigint) {
   publish('block', { number:Number(blockNumber) });
 }
 
-export async function runScanner() {
-  if (running) return;
+export async function runScanner(options: { durationMinutes?: number; fromLatest?: boolean } = {}) {
+  if (running) return false;
   running = true; stopRequested = false;
-  let next = await initialBlock();
-  console.log(`[scanner] starting at block ${next}`);
-  while (!stopRequested) {
-    try {
-      const tip = await client.getBlockNumber(); latestKnown = tip;
-      const target = tip - BigInt(config.CONFIRMATIONS);
-      let count = 0;
-      while (next <= target && count < config.MAX_BLOCKS_PER_TICK && !stopRequested) {
-        await scanOne(next); next++; count++;
+  startedAt = Date.now();
+  endsAt = options.durationMinutes ? startedAt + options.durationMinutes * 60_000 : null;
+  publish('scanner:status', { running:true, startedAt, endsAt });
+  let completed = false;
+  try {
+    let next = await initialBlock(options.fromLatest ?? true);
+    console.log(`[scanner] starting at block ${next}`);
+    while (!stopRequested && (endsAt === null || Date.now() < endsAt)) {
+      try {
+        const tip = await client.getBlockNumber(); latestKnown = tip;
+        const target = tip - BigInt(config.CONFIRMATIONS);
+        let count = 0;
+        while (next <= target && count < config.MAX_BLOCKS_PER_TICK && !stopRequested) {
+          await scanOne(next); next++; count++;
+        }
+      } catch (e) {
+        console.error('[scanner] tick error:', e instanceof Error ? e.message : e);
       }
-    } catch (e) {
-      console.error('[scanner] tick error:', e instanceof Error ? e.message : e);
+      await new Promise(r => setTimeout(r, config.POLL_INTERVAL_MS));
     }
-    await new Promise(r => setTimeout(r, config.POLL_INTERVAL_MS));
+    completed = !stopRequested;
+    return true;
+  } finally {
+    running = false;
+    const stoppedAt = Date.now();
+    startedAt = null;
+    endsAt = null;
+    stopRequested = false;
+    publish('scanner:status', { running:false, stoppedAt, completed });
+    console.log('[scanner] stopped');
   }
-  running = false;
-  console.log('[scanner] stopped');
 }

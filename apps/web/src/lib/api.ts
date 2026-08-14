@@ -4,3 +4,10 @@ export async function fetchTokens(q='') { const r=await fetch(`${API}/api/tokens
 export async function fetchStats() { const r=await fetch(`${API}/api/stats`); if(!r.ok) throw new Error('API unavailable'); return r.json() as Promise<Stats>; }
 export async function fetchToken(address:string) { const r=await fetch(`${API}/api/tokens/${address}`); if(!r.ok) throw new Error('Token unavailable'); return r.json() as Promise<TokenRecord>; }
 export async function rescan(address:string) { await fetch(`${API}/api/tokens/${address}/rescan`,{method:'POST'}); }
+export async function startScanner(durationMinutes:number) {
+  const r=await fetch(`${API}/api/scanner/start`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({durationMinutes})});
+  const body=await r.json(); if(!r.ok) throw new Error(body.error||'Unable to start scanner'); return body;
+}
+export async function stopScanner() {
+  const r=await fetch(`${API}/api/scanner/stop`,{method:'POST'}); const body=await r.json(); if(!r.ok) throw new Error(body.error||'Unable to stop scanner'); return body;
+}

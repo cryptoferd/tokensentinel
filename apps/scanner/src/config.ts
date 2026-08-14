@@ -19,6 +19,7 @@ const envSchema = z.object({
   ANALYSIS_CONCURRENCY: z.coerce.number().int().min(1).max(16).default(2),
   HOLDER_LOOKBACK_BLOCKS: z.coerce.number().int().min(100).default(50000),
   MAX_TRANSFER_LOGS: z.coerce.number().int().min(100).default(20000),
+  SCANNER_AUTO_START: z.string().default('false').transform(value => value.toLowerCase() === 'true'),
   DEX_V2_FACTORIES: z.string().default(''),
   DEX_V3_FACTORIES: z.string().default(''),
   KNOWN_ROUTERS: z.string().default(''),

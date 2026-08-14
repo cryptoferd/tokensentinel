@@ -61,5 +61,7 @@ export interface Stats {
   poolCount: number;
   highRiskCount: number;
   scannerRunning: boolean;
+  scannerStartedAt: number | null;
+  scannerEndsAt: number | null;
   queueDepth: number;
 }

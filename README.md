@@ -1,6 +1,6 @@
 # Robinhood Token Sentinel
 
-A real-time, self-hosted launch monitor and contract-risk scanner for **Robinhood Chain mainnet (chain ID 4663)**.
+An on-demand, timed launch monitor and contract-risk scanner for **Robinhood Chain mainnet (chain ID 4663)**.
 
 > Research tooling only. A clean result is **not** a guarantee that a token is safe, sellable, fairly launched, or free of malicious behavior.
 
@@ -17,7 +17,10 @@ one-click template button after the repository is on GitHub.
 
 ## What it does
 
-- Watches every new block for **contract-creation transactions**.
+- Runs user-controlled live scanning sessions from **5 to 60 minutes**.
+- Starts each timed session at the current chain tip and stops automatically at zero.
+- Includes an immediate manual stop control and live countdown.
+- Watches every new block during an active session for **contract-creation transactions**.
 - Probes new contracts for ERC-20 behavior (`name`, `symbol`, `decimals`, `totalSupply`).
 - Detects canonical **Uniswap V2-style `PairCreated`** and **V3-style `PoolCreated`** events chain-wide.
 - Stores discoveries in SQLite so page reloads do not rescan chain history.
@@ -38,7 +41,7 @@ Block explorer: https://robinhoodchain.blockscout.com
 WETH (L2):      0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73
 ```
 
-The public RPC is convenient for development. For continuous production indexing, set `RPC_URL` to a dedicated Robinhood Chain endpoint from your preferred provider.
+The public RPC is convenient for occasional timed sessions. For frequent or long-running sessions, set `RPC_URL` to a dedicated Robinhood Chain endpoint from your preferred provider.
 
 ## Requirements
 
@@ -84,6 +87,7 @@ npm start
 | `ANALYSIS_CONCURRENCY` | Parallel deep analyses | `2` |
 | `HOLDER_LOOKBACK_BLOCKS` | Maximum holder reconstruction lookback | `50000` |
 | `MAX_TRANSFER_LOGS` | Holder-analysis log safety limit | `20000` |
+| `SCANNER_AUTO_START` | Start continuous scanning when the API boots; keep `false` for timed dashboard sessions | `false` |
 | `DB_PATH` | SQLite database location; uses an attached Railway volume automatically when unset | `./sentinel.db` locally |
 | `DEX_V2_FACTORIES` | Optional comma-separated V2 factory allowlist | empty |
 | `DEX_V3_FACTORIES` | Optional comma-separated V3 factory allowlist | empty |
@@ -99,6 +103,8 @@ If the DEX factory lists are empty, canonical V2/V3 pool events from any event e
 - `GET /api/tokens?limit=100&offset=0&q=PEPE&risk=HIGH`
 - `GET /api/tokens/:address`
 - `POST /api/tokens/:address/rescan`
+- `POST /api/scanner/start` with `{ "durationMinutes": 5..60 }`
+- `POST /api/scanner/stop`
 - `GET /api/stream` — Server-Sent Events
 
 ## Risk model
@@ -138,7 +144,7 @@ packages/
 
 ## Deployment notes
 
-The scanner is a persistent process and writes SQLite state. Do **not** deploy the scanner itself as a stateless Vercel serverless function. Suitable options include a VM, Docker host, Railway/Render/Fly-style persistent service, or a home/server machine. The React frontend can be hosted statically anywhere.
+The scanner writes SQLite state and should not be deployed as a stateless Vercel function. Railway can host the API with a persistent volume and its Serverless option enabled. With `SCANNER_AUTO_START=false`, blockchain polling occurs only during a timed session; after the dashboard is closed and outbound activity stops, Railway can put the service to sleep. The React frontend remains hosted statically on Vercel.
 
 For the included Railway + Vercel layout, follow [DEPLOY.md](DEPLOY.md). The
 checked-in `railway.json` configures Docker builds, health checks and restart
