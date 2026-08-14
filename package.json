@@ -1,0 +1,15 @@
+{
+  "name": "robinhood-token-sentinel",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Real-time Robinhood Chain token launch monitor and contract risk scanner",
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "dev": "concurrently -n scanner,web -c auto \"npm run dev -w @sentinel/scanner\" \"npm run dev -w @sentinel/web\"",
+    "build": "npm run build -w @sentinel/shared && npm run build -w @sentinel/scanner && npm run build -w @sentinel/web",
+    "start": "npm run start -w @sentinel/scanner",
+    "typecheck": "npm run build -w @sentinel/shared && npm run typecheck -w @sentinel/scanner && npm run typecheck -w @sentinel/web"
+  },
+  "engines": {"node": ">=20"},
+  "devDependencies": {"concurrently": "^9.1.2"}
+}

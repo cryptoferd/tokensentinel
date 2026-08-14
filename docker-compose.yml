@@ -1,0 +1,13 @@
+services:
+  scanner:
+    build: .
+    env_file: .env
+    ports:
+      - "8787:8787"
+    volumes:
+      - sentinel-data:/app/data
+    environment:
+      DB_PATH: /app/data/sentinel.db
+    restart: unless-stopped
+volumes:
+  sentinel-data:
