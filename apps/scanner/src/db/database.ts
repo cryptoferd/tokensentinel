@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS state (
 );
 CREATE TABLE IF NOT EXISTS tokens (
   address TEXT PRIMARY KEY,
+  asset_type TEXT NOT NULL DEFAULT 'ERC20',
   name TEXT,
   symbol TEXT,
   decimals INTEGER,
@@ -69,6 +70,7 @@ CREATE TABLE IF NOT EXISTS scan_sessions (
   id TEXT PRIMARY KEY,
   user_address TEXT NOT NULL,
   mode TEXT NOT NULL,
+  asset_type TEXT NOT NULL DEFAULT 'ERC20',
   duration_minutes INTEGER,
   lookback_minutes INTEGER,
   started_at INTEGER NOT NULL,
@@ -100,3 +102,5 @@ function ensureColumn(table: string, name: string, definition: string) {
 
 ensureColumn('tokens', 'market_cap_usd', 'REAL');
 ensureColumn('tokens', 'liquidity_usd', 'REAL');
+ensureColumn('tokens', 'asset_type', "TEXT NOT NULL DEFAULT 'ERC20'");
+ensureColumn('scan_sessions', 'asset_type', "TEXT NOT NULL DEFAULT 'ERC20'");

@@ -28,7 +28,8 @@ one-click template button after the repository is on GitHub.
 - Starts each timed session at the current chain tip and stops automatically at zero.
 - Includes an immediate manual stop control and live countdown.
 - Watches every new block during an active session for **contract-creation transactions**.
-- Probes new contracts for ERC-20 behavior (`name`, `symbol`, `decimals`, `totalSupply`).
+- Classifies new deployments as ERC-20 or ERC-721 using ERC-165 plus contract metadata probes.
+- Lets each live or historical scan target Tokens, NFTs, or Both; new scans default to ERC-20 tokens.
 - Detects canonical **Uniswap V2-style `PairCreated`** and **V3-style `PoolCreated`** events chain-wide.
 - Stores discoveries in SQLite so page reloads do not rescan chain history.
 - Pulls verified source/ABI information from Robinhood Chain Blockscout.
@@ -117,11 +118,11 @@ If the DEX factory lists are empty, canonical V2/V3 pool events from any event e
 - `GET /api/stats`
 - `GET /api/scans`
 - `DELETE /api/scans/:id` — deletes one completed/failed/stopped scan owned by the authenticated wallet
-- `POST /api/scans/history` with `{ "lookbackMinutes": 5|30|60|180|360|720|1440 }`
+- `POST /api/scans/history` with `{ "lookbackMinutes": 5|30|60|180|360|720|1440, "assetType": "ERC20"|"ERC721"|"BOTH" }`
 - `GET /api/scans/:id/results` with market-cap, holder, LP, concentration, tax, risk and text filters
 - `GET /api/tokens/:address`
 - `POST /api/tokens/:address/rescan`
-- `POST /api/scanner/start` with `{ "durationMinutes": 5..60 }`
+- `POST /api/scanner/start` with `{ "durationMinutes": 5..60, "assetType": "ERC20"|"ERC721"|"BOTH" }`
 - `POST /api/scanner/stop` with `{ "scanId": "..." }`
 - `GET /api/stream` — Server-Sent Events
 

@@ -1,5 +1,7 @@
 export type Severity = 'info' | 'low' | 'medium' | 'high' | 'critical';
 export type AnalysisState = 'queued' | 'analyzing' | 'complete' | 'partial' | 'failed';
+export type AssetType = 'ERC20' | 'ERC721';
+export type ScanAssetType = AssetType | 'BOTH';
 
 export interface Warning {
   code: string;
@@ -27,6 +29,7 @@ export interface PoolInfo {
 }
 export interface TokenRecord {
   address: string;
+  assetType: AssetType;
   name: string | null;
   symbol: string | null;
   decimals: number | null;
@@ -62,6 +65,7 @@ export interface ScanSession {
   id: string;
   userAddress: string;
   mode: ScanMode;
+  assetType: ScanAssetType;
   durationMinutes: number | null;
   lookbackMinutes: number | null;
   startedAt: number;
@@ -76,6 +80,7 @@ export interface ScanSession {
   error: string | null;
 }
 export interface TokenFilters {
+  assetType?: AssetType;
   q?: string;
   risk?: string;
   minMarketCap?: number;

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { ScanSession, Stats, TokenFilters, TokenRecord } from '@sentinel/shared';
+import type { ScanAssetType, ScanSession, Stats, TokenFilters, TokenRecord } from '@sentinel/shared';
 import { Activity, Clock3, Database, Filter, History, LogOut, Search, ShieldCheck, Square, Timer, Trash2, TriangleAlert, Wallet, Wifi } from 'lucide-react';
 import { createWalletClient, custom, getAddress } from 'viem';
 import { authMe, authNonce, authVerify, clearSessionToken, deleteScan, fetchScanResults, fetchScans, fetchStats, getSessionToken, logout, saveSessionToken, startHistoryScan, startScanner, stopScanner } from './lib/api';
@@ -11,7 +11,8 @@ const WINDOWS=[{label:'5m',value:5},{label:'30m',value:30},{label:'1h',value:60}
 const emptyFilters:TokenFilters={q:'',risk:'',minMarketCap:undefined,maxMarketCap:undefined,minHolders:undefined,maxHolders:undefined,maxTop5:undefined,hasLiquidity:undefined};
 const short=(address:string)=>`${address.slice(0,6)}…${address.slice(-4)}`;
 const formatRemaining=(ms:number)=>{const seconds=Math.max(0,Math.ceil(ms/1000));return`${String(Math.floor(seconds/60)).padStart(2,'0')}:${String(seconds%60).padStart(2,'0')}`;};
-const scanLabel=(scan:ScanSession)=>scan.mode==='live'?`${scan.durationMinutes}m live scan`:`Last ${WINDOWS.find(item=>item.value===scan.lookbackMinutes)?.label??`${scan.lookbackMinutes}m`}`;
+const assetLabel=(type:ScanAssetType)=>type==='ERC20'?'Tokens':type==='ERC721'?'NFTs':'Tokens + NFTs';
+const scanLabel=(scan:ScanSession)=>`${scan.mode==='live'?`${scan.durationMinutes}m live scan`:`Last ${WINDOWS.find(item=>item.value===scan.lookbackMinutes)?.label??`${scan.lookbackMinutes}m`}`} · ${assetLabel(scan.assetType)}`;
 
 function Login({onLogin}:{onLogin:(address:string)=>void}) {
   const [busy,setBusy]=useState(false); const [error,setError]=useState(''); const [providers,setProviders]=useState<EIP6963ProviderDetail[]>([]);
@@ -38,7 +39,7 @@ export default function App(){
   const [address,setAddress]=useState<string|null>(null); const [authLoading,setAuthLoading]=useState(Boolean(getSessionToken()));
   const [tokens,setTokens]=useState<TokenRecord[]>([]); const [stats,setStats]=useState<Stats|null>(null); const [scans,setScans]=useState<ScanSession[]>([]);
   const [selectedScanId,setSelectedScanId]=useState(''); const [selected,setSelected]=useState<TokenRecord|null>(null);
-  const [filters,setFilters]=useState<TokenFilters>(emptyFilters); const [duration,setDuration]=useState(DEFAULT_DURATION); const [busy,setBusy]=useState(false); const [error,setError]=useState(''); const [now,setNow]=useState(Date.now());
+  const [filters,setFilters]=useState<TokenFilters>(emptyFilters); const [duration,setDuration]=useState(DEFAULT_DURATION); const [assetType,setAssetType]=useState<ScanAssetType>('ERC20'); const [busy,setBusy]=useState(false); const [error,setError]=useState(''); const [now,setNow]=useState(Date.now());
 
   useEffect(()=>{if(!getSessionToken()){setAuthLoading(false);return;}authMe().then(me=>setAddress(me.address)).catch(()=>clearSessionToken()).finally(()=>setAuthLoading(false));},[]);
   const refresh=useCallback(async()=>{
@@ -46,7 +47,7 @@ export default function App(){
     try{
       const [nextStats,nextScans]=await Promise.all([fetchStats(),fetchScans()]); setStats(nextStats);setScans(nextScans);
       const scanId=selectedScanId||nextScans[0]?.id||''; if(!selectedScanId&&scanId)setSelectedScanId(scanId);
-      if(scanId){const result=await fetchScanResults(scanId,filters);setTokens(result.items);}else setTokens([]);
+      if(scanId){const result=await fetchScanResults(scanId,filters);setTokens(result.items);setSelected(current=>current?result.items.find(token=>token.address===current.address)??current:null);}else setTokens([]);
       setError('');
     }catch(error){const message=error instanceof Error?error.message:String(error);setError(message);if(!getSessionToken())setAddress(null);}
   },[address,selectedScanId,JSON.stringify(filters)]);
@@ -57,9 +58,9 @@ export default function App(){
   const selectedScan=scans.find(scan=>scan.id===selectedScanId)??null;
   const remaining=activeScan?.endsAt?Math.max(0,activeScan.endsAt-now):0;
   async function action(work:()=>Promise<unknown>){setBusy(true);setError('');try{await work();await refresh();}catch(error){setError(error instanceof Error?error.message:String(error));}finally{setBusy(false);}}
-  const startLive=()=>action(async()=>{const {scan}=await startScanner(duration);setSelectedScanId(scan.id);});
+  const startLive=()=>action(async()=>{const {scan}=await startScanner(duration,assetType);setSelectedScanId(scan.id);});
   const stopLive=()=>action(async()=>{await stopScanner(activeScan?.id);});
-  const history=(minutes:number)=>action(async()=>{const {scan}=await startHistoryScan(minutes);setSelectedScanId(scan.id);});
+  const history=(minutes:number)=>action(async()=>{const {scan}=await startHistoryScan(minutes,assetType);setSelectedScanId(scan.id);});
   const signOut=()=>action(async()=>{await logout();setAddress(null);setScans([]);setTokens([]);});
   async function removeScan(scan:ScanSession){
     if(!window.confirm(`Delete "${scanLabel(scan)}" from your scan history?`))return;
@@ -76,7 +77,8 @@ export default function App(){
   return <main>
     <header><div className="brand"><div className="mark"><ShieldCheck/></div><div><h1>ROBINHOOD TOKEN SENTINEL</h1><p>Croikey-gated launch intelligence</p></div></div><div className="header-actions"><div className={`live ${activeScan?'on':''}`}><Wifi size={15}/>{activeScan?'SCANNING':'READY'} <span>CHAIN 4663</span></div><button className="wallet-pill" onClick={signOut} title="Sign out"><Wallet size={14}/>{short(address)}<LogOut size={13}/></button></div></header>
     <div className="content"><section className="hero"><div><div className="eyebrow">PRIVATE HOLDER DASHBOARD</div><h2>Your scans.<br/><span>Your launch history.</span></h2><p>Run live monitoring or backfill recent Robinhood Chain launches. Every scan and its results are saved privately to your connected wallet.</p></div><div className="block-card"><span>SCANNED BLOCK</span><strong>{stats?.scannedBlock?.toLocaleString()||'—'}</strong><small>tip {stats?.latestBlock?.toLocaleString()||'—'}</small></div></section>
-      <section className="scan-grid"><article className={`scan-control ${activeScan?'active':''}`}><div className="scan-copy"><div className="scan-icon"><Timer/></div><div><span>TIMED LIVE SCAN</span><h3>{activeScan?'Monitoring new launches':'Choose a scan duration'}</h3><p>{activeScan?'Results are being saved to your wallet dashboard.':'Begin at the current tip and stop automatically.'}</p></div></div><div className="scan-settings">{activeScan?<div className="countdown"><span>TIME REMAINING</span><strong>{formatRemaining(remaining)}</strong></div>:<><div className="duration-readout"><span>DURATION</span><strong>{duration}<small> MIN</small></strong></div><div className="range-wrap"><input aria-label="Scan duration" type="range" min="5" max="60" step="5" value={duration} onChange={event=>setDuration(Number(event.target.value))}/><div><span>5 MIN</span><span>1 HOUR</span></div></div></>}<button className={`scan-button ${activeScan?'stop':''}`} disabled={busy} onClick={activeScan?stopLive:startLive}>{activeScan?<><Square size={15}/>STOP MY SCAN</>:<><Activity size={16}/>START LIVE SCAN</>}</button></div></article>
+      <section className="asset-mode"><div><span>CONTRACT TYPE</span><p>Choose what this scan should detect.</p></div><div className="asset-choices">{(['ERC20','ERC721','BOTH'] as ScanAssetType[]).map(type=><button className={assetType===type?'selected':''} disabled={busy||Boolean(activeScan)} key={type} onClick={()=>setAssetType(type)}><b>{type==='ERC20'?'TOKENS':type==='ERC721'?'NFTs':'BOTH'}</b><small>{type}</small></button>)}</div></section>
+      <section className="scan-grid"><article className={`scan-control ${activeScan?'active':''}`}><div className="scan-copy"><div className="scan-icon"><Timer/></div><div><span>TIMED LIVE SCAN / {assetLabel(activeScan?.assetType??assetType).toUpperCase()}</span><h3>{activeScan?'Monitoring new launches':'Choose a scan duration'}</h3><p>{activeScan?'Results are being saved to your wallet dashboard.':'Begin at the current tip and stop automatically.'}</p></div></div><div className="scan-settings">{activeScan?<div className="countdown"><span>TIME REMAINING</span><strong>{formatRemaining(remaining)}</strong></div>:<><div className="duration-readout"><span>DURATION</span><strong>{duration}<small> MIN</small></strong></div><div className="range-wrap"><input aria-label="Scan duration" type="range" min="5" max="60" step="5" value={duration} onChange={event=>setDuration(Number(event.target.value))}/><div><span>5 MIN</span><span>1 HOUR</span></div></div></>}<button className={`scan-button ${activeScan?'stop':''}`} disabled={busy} onClick={activeScan?stopLive:startLive}>{activeScan?<><Square size={15}/>STOP MY SCAN</>:<><Activity size={16}/>START LIVE SCAN</>}</button></div></article>
         <article className="history-control"><div><span className="control-label"><History size={15}/>HISTORICAL LOOKBACK</span><h3>What launched recently?</h3><p>Backfill a selected chain window. Longer windows continue in the background.</p></div><div className="window-buttons">{WINDOWS.map(item=><button key={item.value} disabled={busy} onClick={()=>history(item.value)}>{item.label}</button>)}</div></article></section>
       <section className="stats"><div><Activity/><span>Selected results</span><strong>{tokens.length}</strong></div><div><Database/><span>Your saved scans</span><strong>{scans.length}</strong></div><div><TriangleAlert/><span>High / critical</span><strong>{tokens.filter(token=>token.riskLabel==='HIGH'||token.riskLabel==='CRITICAL').length}</strong></div><div><ShieldCheck/><span>Analysis queue</span><strong>{stats?.queueDepth??0}</strong></div></section>
       <section className="workspace"><aside className="scan-history"><div className="section-heading"><Clock3 size={15}/><span>SCAN HISTORY</span></div>{scans.map(scan=><div className={`scan-history-item ${scan.id===selectedScanId?'selected':''}`} key={scan.id}><button className="scan-select" onClick={()=>setSelectedScanId(scan.id)} title={scan.error??undefined}><span>{scanLabel(scan)}</span><small>{new Date(scan.startedAt).toLocaleString()}</small><em className={`status-${scan.status}`}>{scan.status}{scan.status==='running'&&scan.totalBlocks?` ${Math.round(scan.scannedBlocks/scan.totalBlocks*100)}%`:''} · {scan.resultCount}</em>{scan.error&&<small className="scan-error-detail">{scan.error}</small>}</button>{scan.status!=='running'&&<button className="delete-scan" disabled={busy} onClick={()=>removeScan(scan)} aria-label={`Delete ${scanLabel(scan)}`} title="Delete scan"><Trash2 size={14}/></button>}</div>)}{!scans.length&&<p>No saved scans yet.</p>}</aside>

@@ -1,7 +1,7 @@
 import { client } from '../chain/client.js';
 import { config } from '../config.js';
 import { attachTokenToActiveLiveScans, attachTokenToScan, getState, latestActiveLiveEnd, setState, upsertToken } from '../db/repository.js';
-import { readErc20Metadata } from '../analysis/analyzer.js';
+import { readDeploymentMetadata } from '../analysis/analyzer.js';
 import { enqueueAnalysis } from './analysisQueue.js';
 import { scanPools } from './poolWatcher.js';
 import { publish } from '../events.js';
@@ -55,8 +55,8 @@ export async function scanDeployments(blockNumber: bigint, scanId?:string) {
 }
 
 export async function recordDeployment(input:{contract:`0x${string}`;deployer:string|null;transactionHash:string;blockNumber:number;timestamp:number;scanId?:string}) {
-  const meta=await readErc20Metadata(input.contract); if(!meta)return false;
-  const record={address:input.contract.toLowerCase(),name:meta.name,symbol:meta.symbol,decimals:meta.decimals,totalSupply:meta.totalSupply.toString(),deployer:input.deployer?.toLowerCase()??null,
+  const meta=await readDeploymentMetadata(input.contract); if(!meta)return false;
+  const record={address:input.contract.toLowerCase(),assetType:meta.assetType,name:meta.name,symbol:meta.symbol,decimals:meta.decimals,totalSupply:meta.totalSupply?.toString()??null,deployer:input.deployer?.toLowerCase()??null,
     deploymentTx:input.transactionHash,deploymentBlock:input.blockNumber,firstSeenAt:input.timestamp,analysisState:'queued' as const,riskScore:0,riskLabel:'LOW' as const,warnings:[],bytecodeFlags:[],topHolders:[],poolCreated:false,pools:[],verified:null,sourceAvailable:null,
     owner:null,ownershipRenounced:null,buyTax:null,sellTax:null,top5Percent:null,circulatingTop5Percent:null,holderCountEstimate:null,marketCapUsd:null,liquidityUsd:null,updatedAt:Date.now()};
   upsertToken(record); if(input.scanId)attachTokenToScan(input.scanId,input.contract);else attachTokenToActiveLiveScans(input.contract);

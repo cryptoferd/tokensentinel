@@ -9,7 +9,8 @@ import { enqueueAnalysis, queueDepth } from '../workers/analysisQueue.js';
 import { runScanner, scannerStatus, stopScanner } from '../workers/blockScanner.js';
 import { createChallenge, gateInfo, logout, requireAuth, verifyGateAndCreateSession } from '../auth.js';
 import { runHistoricalScan } from '../workers/historicalScanner.js';
-import type { TokenFilters } from '@sentinel/shared';
+import type { ScanAssetType, TokenFilters } from '@sentinel/shared';
+import { enqueueMarketRefresh } from '../workers/marketRefresh.js';
 
 export function createServer() {
   const app = express();
@@ -18,6 +19,7 @@ export function createServer() {
     if (!origin || isOriginAllowed(origin)) cb(null, true);
     else cb(new Error('CORS blocked'));
   } }));
+  app.use('/api',(_req,res,next)=>{res.setHeader('Cache-Control','no-store, no-cache, must-revalidate, proxy-revalidate');res.setHeader('Pragma','no-cache');res.setHeader('Expires','0');next();});
 
   app.get('/health', (_req,res) => res.json({ ok:true, chainId:config.CHAIN_ID, rpc:config.RPC_URL.replace(/\/v2\/[^/]+$/, '/v2/***') }));
   app.get('/api/auth/config',(_req,res)=>res.json(gateInfo));
@@ -38,7 +40,7 @@ export function createServer() {
     res.json({ items:listTokens({ limit, offset, risk:typeof req.query.risk === 'string' ? req.query.risk : undefined, q:typeof req.query.q === 'string' ? req.query.q : undefined }) });
   });
   app.get('/api/tokens/:address', (req,res) => {
-    const token = getToken(req.params.address); if (!token) return res.status(404).json({ error:'Token not found' }); res.json(token);
+    const token = getToken(req.params.address); if (!token) return res.status(404).json({ error:'Token not found' }); enqueueMarketRefresh(token);res.json(token);
   });
   app.post('/api/tokens/:address/rescan', (req,res) => {
     const token = getToken(req.params.address); if (!token) return res.status(404).json({ error:'Token not found' }); enqueueAnalysis(token.address); res.status(202).json({ queued:true });
@@ -48,10 +50,12 @@ export function createServer() {
     if (!Number.isInteger(durationMinutes) || durationMinutes < 5 || durationMinutes > 60) {
       return res.status(400).json({ error:'durationMinutes must be a whole number from 5 to 60' });
     }
+    const assetType=parseAssetType(req.body?.assetType);
+    if(!assetType)return res.status(400).json({error:'assetType must be ERC20, ERC721 or BOTH'});
     const existing=activeLiveScanForUser(req.userAddress!);
     if (existing) return res.status(409).json({error:'You already have a live scan running.',scan:existing});
     const endsAt=Date.now()+durationMinutes*60_000;
-    const scan=createScanSession({id:randomUUID(),userAddress:req.userAddress!,mode:'live',durationMinutes,endsAt});
+    const scan=createScanSession({id:randomUUID(),userAddress:req.userAddress!,mode:'live',assetType,durationMinutes,endsAt});
     void runScanner({ durationMinutes, fromLatest:true }).catch(error => console.error('[scanner] session failed:', error));
     res.status(202).json({ started:true, scan, ...scannerStatus() });
   });
@@ -70,7 +74,9 @@ export function createServer() {
   app.post('/api/scans/history',(req,res)=>{
     const lookbackMinutes=Number(req.body?.lookbackMinutes);
     if (![5,30,60,180,360,720,1440].includes(lookbackMinutes)) return res.status(400).json({error:'Choose 5m, 30m, 1h, 3h, 6h, 12h or 24h.'});
-    const scan=createScanSession({id:randomUUID(),userAddress:req.userAddress!,mode:'history',lookbackMinutes});
+    const assetType=parseAssetType(req.body?.assetType);
+    if(!assetType)return res.status(400).json({error:'assetType must be ERC20, ERC721 or BOTH'});
+    const scan=createScanSession({id:randomUUID(),userAddress:req.userAddress!,mode:'history',assetType,lookbackMinutes});
     void runHistoricalScan(scan.id,lookbackMinutes);
     res.status(202).json({scan});
   });
@@ -88,10 +94,12 @@ export function createServer() {
     const scan=getScanSession(req.params.id,req.userAddress!); if(!scan)return res.status(404).json({error:'Scan not found'});
     const number=(name:string)=>typeof req.query[name]==='string'&&req.query[name]!==''?Number(req.query[name]):undefined;
     const filters:TokenFilters={q:typeof req.query.q==='string'?req.query.q:undefined,risk:typeof req.query.risk==='string'?req.query.risk:undefined,
+      assetType:req.query.assetType==='ERC20'||req.query.assetType==='ERC721'?req.query.assetType:undefined,
       minMarketCap:number('minMarketCap'),maxMarketCap:number('maxMarketCap'),minHolders:number('minHolders'),maxHolders:number('maxHolders'),maxTop5:number('maxTop5'),maxBuyTax:number('maxBuyTax'),maxSellTax:number('maxSellTax'),
       hasLiquidity:req.query.hasLiquidity==='true'?true:req.query.hasLiquidity==='false'?false:undefined};
     const limit=Math.min(200,Math.max(1,Number(req.query.limit??100))),offset=Math.max(0,Number(req.query.offset??0));
-    res.json({scan,items:listScanTokens(scan.id,req.userAddress!,filters,limit,offset)});
+    const items=listScanTokens(scan.id,req.userAddress!,filters,limit,offset);items.forEach(enqueueMarketRefresh);
+    res.json({scan,items});
   });
   app.get('/api/stream', (req,res) => {
     res.setHeader('Content-Type','text/event-stream'); res.setHeader('Cache-Control','no-cache'); res.setHeader('Connection','keep-alive'); res.flushHeaders();
@@ -102,6 +110,11 @@ export function createServer() {
     req.on('close', () => { clearInterval(keep); events.off('message', handler); });
   });
   return app;
+}
+
+function parseAssetType(value:unknown):ScanAssetType|null {
+  const normalized=String(value??'ERC20').toUpperCase();
+  return normalized==='ERC20'||normalized==='ERC721'||normalized==='BOTH'?normalized:null;
 }
 
 function isOriginAllowed(origin: string) {
