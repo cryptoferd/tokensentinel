@@ -24,8 +24,10 @@ one-click template button after the repository is on GitHub.
 - Uses a gas-free signed-wallet challenge and server-side Ethereum ownership check.
 - Saves scan sessions and results separately for each authenticated wallet.
 - Selects Robinhood, Ethereum, Base, Arbitrum, Optimism, Polygon, BNB Chain, Avalanche or Linea per scan.
-- Backfills launches from the last **5m, 30m, 1h, 3h, 6h, 12h or 24h** using concurrent Alchemy block-range scanning.
+- Uses public/standard chain RPCs for live scans, keeping live polling off Alchemy.
+- Backfills launches from the last **5m, 30m, 1h, 3h, 6h, 12h or 24h** using concurrent Alchemy block-range scanning when a key is configured.
 - Adds Dexscreener market-cap/liquidity enrichment and filters for market cap, holders, concentration, liquidity and risk.
+- Adds direct DexScreener links for tokens and OpenSea links for NFT collections.
 - Starts each timed session at the current chain tip and stops automatically at zero.
 - Includes an immediate manual stop control and live countdown.
 - Watches every new block during an active session for **contract-creation transactions**.
@@ -50,7 +52,7 @@ Block explorer: https://robinhoodchain.blockscout.com
 WETH (L2):      0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73
 ```
 
-The public RPC is convenient for occasional timed sessions. For frequent or long-running sessions, set `RPC_URL` to a dedicated Robinhood Chain endpoint from your preferred provider.
+The public RPCs are used for live monitoring and contract analysis. Alchemy is reserved for historical block retrieval. For frequent or long-running sessions, override the relevant live RPC variable with a dedicated non-Alchemy endpoint.
 
 ## Requirements
 
@@ -87,8 +89,9 @@ npm start
 
 | Variable | Purpose | Default |
 |---|---|---|
-| `ALCHEMY_API_KEY` | Railway-only key used to access all selectable EVM RPC endpoints | empty |
-| `RPC_URL` | Robinhood fallback RPC when Alchemy is not configured | Official public RPC |
+| `ALCHEMY_API_KEY` | Railway-only key used exclusively for accelerated historical block retrieval | empty |
+| `RPC_URL` | Robinhood live-scan RPC; Alchemy is never substituted here | Official public RPC |
+| `LIVE_RPC_URL_*` | Per-chain live RPC overrides for Ethereum, Base, Arbitrum, Optimism, Polygon, BNB, Avalanche and Linea | Public chain endpoints |
 | `CHAIN_ID` | Robinhood mainnet chain ID | `4663` |
 | `BLOCKSCOUT_API_URL` | Explorer API | Robinhood Blockscout `/api` |
 | `START_BLOCK` | First block if no DB cursor exists | `latest` |

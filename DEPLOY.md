@@ -46,17 +46,19 @@ Create an empty GitHub repository and upload the contents of this project so tha
 
 The dashboard starts live monitoring only when you choose a 5–60 minute duration
 and press **Start Scan**. Each session begins at the current chain tip and stops
-automatically. For frequent one-hour sessions, replace the public `RPC_URL` with
-a dedicated Robinhood Chain endpoint.
+automatically. Live scans use public/standard per-chain RPCs and never consume
+Alchemy CUs. For frequent one-hour sessions, override the relevant `LIVE_RPC_URL_*`
+variable (or `RPC_URL` for Robinhood) with a dedicated non-Alchemy endpoint.
 
 `GATE_RPC_URL` is an Ethereum-mainnet RPC used only to verify Croikey ownership.
 The public default is suitable for light use; a dedicated Ethereum provider is
 recommended if login traffic grows. Never place an RPC key in Vercel—the
 ownership check runs only on Railway.
 
-Historical 5m–24h searches use Alchemy to locate and scan the selected chain's
-block range concurrently, so they do not require the scanner to have been
-running continuously. Keep `ALCHEMY_API_KEY` only on Railway, never in Vercel.
+Historical 5m–24h searches use Alchemy, when configured, to locate and scan the
+selected chain's block range concurrently, so they do not require the scanner
+to have been running continuously. Without a key they fall back to the selected
+chain's public live RPC. Keep `ALCHEMY_API_KEY` only on Railway, never in Vercel.
 Dexscreener enrichment follows the selected network when indexed pairs exist.
 
 ## 3. Deploy the dashboard to Vercel

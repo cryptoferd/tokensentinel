@@ -1,13 +1,13 @@
 import pLimit from 'p-limit';
 import { config } from '../config.js';
-import { getChain, getClient, pacedRpc, sanitizeRpcError } from '../chain/chains.js';
+import { getChain, getHistoricalClient, pacedRpc, sanitizeRpcError } from '../chain/chains.js';
 import { updateScanSession } from '../db/repository.js';
 import { recordDeployment } from './blockScanner.js';
 
 const active=new Set<string>();
 
 async function firstBlockAtOrAfter(chainKey:string,cutoffSeconds:bigint,tip:bigint) {
-  const client=getClient(chainKey);let low=0n,high=tip;
+  const client=getHistoricalClient(chainKey);let low=0n,high=tip;
   while(low<high){
     const mid=(low+high)/2n;
     const block=await pacedRpc(chainKey,()=>client.getBlock({blockNumber:mid}));
@@ -18,7 +18,7 @@ async function firstBlockAtOrAfter(chainKey:string,cutoffSeconds:bigint,tip:bigi
 
 export async function runHistoricalScan(scanId:string,chainKey:string,lookbackMinutes:number) {
   if(active.has(scanId))return;active.add(scanId);
-  const client=getClient(chainKey);const chain=getChain(chainKey);
+  const client=getHistoricalClient(chainKey);const chain=getChain(chainKey);
   try{
     const tip=await pacedRpc(chainKey,()=>client.getBlockNumber());
     const cutoffSeconds=BigInt(Math.floor((Date.now()-lookbackMinutes*60_000)/1000));
