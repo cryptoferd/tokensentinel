@@ -3,7 +3,7 @@ import cors from 'cors';
 import { randomUUID } from 'node:crypto';
 import { config } from '../config.js';
 import { events } from '../events.js';
-import { activeLiveScanForUser, createScanSession, getScanSession, getToken, listScanSessions, listScanTokens, listTokens, latestActiveLiveEnd, stats, stopLiveScan } from '../db/repository.js';
+import { activeLiveScanForUser, createScanSession, deleteScanSession, getScanSession, getToken, listScanSessions, listScanTokens, listTokens, latestActiveLiveEnd, stats, stopLiveScan } from '../db/repository.js';
 import { client } from '../chain/client.js';
 import { enqueueAnalysis, queueDepth } from '../workers/analysisQueue.js';
 import { runScanner, scannerStatus, stopScanner } from '../workers/blockScanner.js';
@@ -77,6 +77,12 @@ export function createServer() {
   app.get('/api/scans',(req,res)=>res.json({items:listScanSessions(req.userAddress!)}));
   app.get('/api/scans/:id',(req,res)=>{
     const scan=getScanSession(req.params.id,req.userAddress!); if(!scan)return res.status(404).json({error:'Scan not found'}); res.json(scan);
+  });
+  app.delete('/api/scans/:id',(req,res)=>{
+    const result=deleteScanSession(req.params.id,req.userAddress!);
+    if(result.reason==='not_found')return res.status(404).json({error:'Scan not found'});
+    if(result.reason==='running')return res.status(409).json({error:'Stop this scan before deleting it.'});
+    res.json({deleted:true,id:req.params.id});
   });
   app.get('/api/scans/:id/results',(req,res)=>{
     const scan=getScanSession(req.params.id,req.userAddress!); if(!scan)return res.status(404).json({error:'Scan not found'});

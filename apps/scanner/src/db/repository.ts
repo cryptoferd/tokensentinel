@@ -136,10 +136,21 @@ export function listScanSessions(userAddress: string, limit = 50) {
   expireLiveScans();
   return (db.prepare(`SELECT s.*,(SELECT COUNT(*) FROM scan_results r WHERE r.scan_id=s.id) result_count FROM scan_sessions s WHERE s.user_address=? ORDER BY s.started_at DESC LIMIT ?`).all(userAddress.toLowerCase(),limit) as any[]).map(rowToScan);
 }
+export function deleteScanSession(id:string,userAddress:string) {
+  const normalized=userAddress.toLowerCase();
+  const scan=db.prepare('SELECT status FROM scan_sessions WHERE id=? AND user_address=?').get(id,normalized) as {status:string}|undefined;
+  if(!scan)return {deleted:false,reason:'not_found' as const};
+  if(scan.status==='running')return {deleted:false,reason:'running' as const};
+  const result=db.prepare('DELETE FROM scan_sessions WHERE id=? AND user_address=?').run(id,normalized);
+  return {deleted:result.changes>0,reason:null};
+}
 export function updateScanSession(id:string, patch:{ status?:string; completedAt?:number|null; fromBlock?:number; toBlock?:number; scannedBlocks?:number; totalBlocks?:number; error?:string|null }) {
   const pairs: string[]=[]; const values:unknown[]=[];
   const mapping:Record<string,string>={status:'status',completedAt:'completed_at',fromBlock:'from_block',toBlock:'to_block',scannedBlocks:'scanned_blocks',totalBlocks:'total_blocks',error:'error'};
-  for (const [key,column] of Object.entries(mapping)) if (key in patch) { pairs.push(`${column}=?`); values.push((patch as any)[key]); }
+  for (const [key,column] of Object.entries(mapping)) {
+    const value=(patch as any)[key];
+    if (key in patch && value !== undefined) { pairs.push(`${column}=?`); values.push(value); }
+  }
   if (pairs.length) db.prepare(`UPDATE scan_sessions SET ${pairs.join(',')} WHERE id=?`).run(...values,id);
 }
 export function attachTokenToScan(scanId:string, tokenAddress:string) {

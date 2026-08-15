@@ -116,6 +116,7 @@ If the DEX factory lists are empty, canonical V2/V3 pool events from any event e
 - All remaining `/api/*` routes require `Authorization: Bearer <session>`.
 - `GET /api/stats`
 - `GET /api/scans`
+- `DELETE /api/scans/:id` — deletes one completed/failed/stopped scan owned by the authenticated wallet
 - `POST /api/scans/history` with `{ "lookbackMinutes": 5|30|60|180|360|720|1440 }`
 - `GET /api/scans/:id/results` with market-cap, holder, LP, concentration, tax, risk and text filters
 - `GET /api/tokens/:address`

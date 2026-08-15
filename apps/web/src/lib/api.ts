@@ -26,6 +26,7 @@ export const startScanner=(durationMinutes:number)=>request<{scan:ScanSession}>(
 export const stopScanner=(scanId?:string)=>request('/api/scanner/stop',{method:'POST',body:JSON.stringify({scanId})});
 export const startHistoryScan=(lookbackMinutes:number)=>request<{scan:ScanSession}>('/api/scans/history',{method:'POST',body:JSON.stringify({lookbackMinutes})});
 export const fetchScans=()=>request<{items:ScanSession[]}>('/api/scans').then(value=>value.items);
+export const deleteScan=(scanId:string)=>request<{deleted:boolean;id:string}>(`/api/scans/${scanId}`,{method:'DELETE'});
 export async function fetchScanResults(scanId:string,filters:TokenFilters={}) {
   const params=new URLSearchParams({limit:'200'});
   Object.entries(filters).forEach(([key,value])=>{if(value!==undefined&&value!==''&&value!==null)params.set(key,String(value));});
