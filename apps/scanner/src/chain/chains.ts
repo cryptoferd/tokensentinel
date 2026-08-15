@@ -5,21 +5,22 @@ import { config } from '../config.js';
 export interface ChainDefinition extends Omit<ChainOption,'enabled'> {
   alchemyHost:string;
   dexScreenerSlug:string;
+  openSeaChain:string|null;
   blockscoutApiUrl:string|null;
   nativeSymbol:string;
   liveRpcUrl:string;
 }
 
 export const CHAINS:ChainDefinition[]=[
-  {key:'robinhood',id:4663,name:'Robinhood Chain',shortName:'Robinhood',alchemyHost:'robinhood-mainnet',dexScreenerSlug:'robinhood',explorerUrl:'https://robinhoodchain.blockscout.com',blockscoutApiUrl:'https://robinhoodchain.blockscout.com/api',nativeSymbol:'ETH',liveRpcUrl:config.RPC_URL},
-  {key:'ethereum',id:1,name:'Ethereum Mainnet',shortName:'Ethereum',alchemyHost:'eth-mainnet',dexScreenerSlug:'ethereum',explorerUrl:'https://etherscan.io',blockscoutApiUrl:'https://eth.blockscout.com/api',nativeSymbol:'ETH',liveRpcUrl:config.LIVE_RPC_URL_ETHEREUM},
-  {key:'base',id:8453,name:'Base',shortName:'Base',alchemyHost:'base-mainnet',dexScreenerSlug:'base',explorerUrl:'https://basescan.org',blockscoutApiUrl:'https://base.blockscout.com/api',nativeSymbol:'ETH',liveRpcUrl:config.LIVE_RPC_URL_BASE},
-  {key:'arbitrum',id:42161,name:'Arbitrum One',shortName:'Arbitrum',alchemyHost:'arb-mainnet',dexScreenerSlug:'arbitrum',explorerUrl:'https://arbiscan.io',blockscoutApiUrl:'https://arbitrum.blockscout.com/api',nativeSymbol:'ETH',liveRpcUrl:config.LIVE_RPC_URL_ARBITRUM},
-  {key:'optimism',id:10,name:'OP Mainnet',shortName:'Optimism',alchemyHost:'opt-mainnet',dexScreenerSlug:'optimism',explorerUrl:'https://optimistic.etherscan.io',blockscoutApiUrl:'https://optimism.blockscout.com/api',nativeSymbol:'ETH',liveRpcUrl:config.LIVE_RPC_URL_OPTIMISM},
-  {key:'polygon',id:137,name:'Polygon PoS',shortName:'Polygon',alchemyHost:'polygon-mainnet',dexScreenerSlug:'polygon',explorerUrl:'https://polygonscan.com',blockscoutApiUrl:'https://polygon.blockscout.com/api',nativeSymbol:'POL',liveRpcUrl:config.LIVE_RPC_URL_POLYGON},
-  {key:'bnb',id:56,name:'BNB Smart Chain',shortName:'BNB Chain',alchemyHost:'bnb-mainnet',dexScreenerSlug:'bsc',explorerUrl:'https://bscscan.com',blockscoutApiUrl:null,nativeSymbol:'BNB',liveRpcUrl:config.LIVE_RPC_URL_BNB},
-  {key:'avalanche',id:43114,name:'Avalanche C-Chain',shortName:'Avalanche',alchemyHost:'avax-mainnet',dexScreenerSlug:'avalanche',explorerUrl:'https://snowtrace.io',blockscoutApiUrl:null,nativeSymbol:'AVAX',liveRpcUrl:config.LIVE_RPC_URL_AVALANCHE},
-  {key:'linea',id:59144,name:'Linea',shortName:'Linea',alchemyHost:'linea-mainnet',dexScreenerSlug:'linea',explorerUrl:'https://lineascan.build',blockscoutApiUrl:'https://explorer.linea.build/api',nativeSymbol:'ETH',liveRpcUrl:config.LIVE_RPC_URL_LINEA}
+  {key:'robinhood',id:4663,name:'Robinhood Chain',shortName:'Robinhood',alchemyHost:'robinhood-mainnet',dexScreenerSlug:'robinhood',openSeaChain:'robinhood',explorerUrl:'https://robinhoodchain.blockscout.com',blockscoutApiUrl:'https://robinhoodchain.blockscout.com/api',nativeSymbol:'ETH',liveRpcUrl:config.RPC_URL},
+  {key:'ethereum',id:1,name:'Ethereum Mainnet',shortName:'Ethereum',alchemyHost:'eth-mainnet',dexScreenerSlug:'ethereum',openSeaChain:'ethereum',explorerUrl:'https://etherscan.io',blockscoutApiUrl:'https://eth.blockscout.com/api',nativeSymbol:'ETH',liveRpcUrl:config.LIVE_RPC_URL_ETHEREUM},
+  {key:'base',id:8453,name:'Base',shortName:'Base',alchemyHost:'base-mainnet',dexScreenerSlug:'base',openSeaChain:'base',explorerUrl:'https://basescan.org',blockscoutApiUrl:'https://base.blockscout.com/api',nativeSymbol:'ETH',liveRpcUrl:config.LIVE_RPC_URL_BASE},
+  {key:'arbitrum',id:42161,name:'Arbitrum One',shortName:'Arbitrum',alchemyHost:'arb-mainnet',dexScreenerSlug:'arbitrum',openSeaChain:'arbitrum',explorerUrl:'https://arbiscan.io',blockscoutApiUrl:'https://arbitrum.blockscout.com/api',nativeSymbol:'ETH',liveRpcUrl:config.LIVE_RPC_URL_ARBITRUM},
+  {key:'optimism',id:10,name:'OP Mainnet',shortName:'Optimism',alchemyHost:'opt-mainnet',dexScreenerSlug:'optimism',openSeaChain:'optimism',explorerUrl:'https://optimistic.etherscan.io',blockscoutApiUrl:'https://optimism.blockscout.com/api',nativeSymbol:'ETH',liveRpcUrl:config.LIVE_RPC_URL_OPTIMISM},
+  {key:'polygon',id:137,name:'Polygon PoS',shortName:'Polygon',alchemyHost:'polygon-mainnet',dexScreenerSlug:'polygon',openSeaChain:'polygon',explorerUrl:'https://polygonscan.com',blockscoutApiUrl:'https://polygon.blockscout.com/api',nativeSymbol:'POL',liveRpcUrl:config.LIVE_RPC_URL_POLYGON},
+  {key:'bnb',id:56,name:'BNB Smart Chain',shortName:'BNB Chain',alchemyHost:'bnb-mainnet',dexScreenerSlug:'bsc',openSeaChain:null,explorerUrl:'https://bscscan.com',blockscoutApiUrl:null,nativeSymbol:'BNB',liveRpcUrl:config.LIVE_RPC_URL_BNB},
+  {key:'avalanche',id:43114,name:'Avalanche C-Chain',shortName:'Avalanche',alchemyHost:'avax-mainnet',dexScreenerSlug:'avalanche',openSeaChain:'avalanche',explorerUrl:'https://snowtrace.io',blockscoutApiUrl:null,nativeSymbol:'AVAX',liveRpcUrl:config.LIVE_RPC_URL_AVALANCHE},
+  {key:'linea',id:59144,name:'Linea',shortName:'Linea',alchemyHost:'linea-mainnet',dexScreenerSlug:'linea',openSeaChain:null,explorerUrl:'https://lineascan.build',blockscoutApiUrl:'https://explorer.linea.build/api',nativeSymbol:'ETH',liveRpcUrl:config.LIVE_RPC_URL_LINEA}
 ];
 
 export function getChain(key:string) {

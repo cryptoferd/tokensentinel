@@ -27,7 +27,7 @@ one-click template button after the repository is on GitHub.
 - Uses public/standard chain RPCs for live scans, keeping live polling off Alchemy.
 - Backfills launches from the last **5m, 30m, 1h, 3h, 6h, 12h or 24h** using concurrent Alchemy block-range scanning when a key is configured.
 - Adds Dexscreener market-cap/liquidity enrichment and filters for market cap, holders, concentration, liquidity and risk.
-- Adds direct DexScreener links for tokens and OpenSea links for NFT collections.
+- Adds direct DexScreener links for tokens and resolves OpenSea collection slugs for indexed NFTs.
 - Starts each timed session at the current chain tip and stops automatically at zero.
 - Includes an immediate manual stop control and live countdown.
 - Watches every new block during an active session for **contract-creation transactions**.
@@ -53,6 +53,8 @@ WETH (L2):      0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73
 ```
 
 The public RPCs are used for live monitoring and contract analysis. Alchemy is reserved for historical block retrieval. For frequent or long-running sessions, override the relevant live RPC variable with a dedicated non-Alchemy endpoint.
+
+OpenSea collection pages use slugs rather than contract addresses. When `OPENSEA_API_KEY` is configured, NFT analysis asks OpenSea for the contract metadata and stores its collection slug. Collections that are unsupported or not yet indexed display as pending; use **Rescan now** after OpenSea indexes the collection.
 
 ## Requirements
 
@@ -90,6 +92,7 @@ npm start
 | Variable | Purpose | Default |
 |---|---|---|
 | `ALCHEMY_API_KEY` | Railway-only key used exclusively for accelerated historical block retrieval | empty |
+| `OPENSEA_API_KEY` | Railway-only key used to resolve an NFT contract to its OpenSea collection slug | empty |
 | `RPC_URL` | Robinhood live-scan RPC; Alchemy is never substituted here | Official public RPC |
 | `LIVE_RPC_URL_*` | Per-chain live RPC overrides for Ethereum, Base, Arbitrum, Optimism, Polygon, BNB, Avalanche and Linea | Public chain endpoints |
 | `CHAIN_ID` | Robinhood mainnet chain ID | `4663` |

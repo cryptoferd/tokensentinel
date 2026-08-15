@@ -21,6 +21,7 @@ Create an empty GitHub repository and upload the contents of this project so tha
 
    ```text
    ALCHEMY_API_KEY=YOUR_ALCHEMY_API_KEY
+   OPENSEA_API_KEY=YOUR_OPENSEA_API_KEY
    RPC_URL=https://rpc.mainnet.chain.robinhood.com
    CHAIN_ID=4663
    CORS_ORIGINS=https://*.vercel.app
@@ -60,6 +61,9 @@ selected chain's block range concurrently, so they do not require the scanner
 to have been running continuously. Without a key they fall back to the selected
 chain's public live RPC. Keep `ALCHEMY_API_KEY` only on Railway, never in Vercel.
 Dexscreener enrichment follows the selected network when indexed pairs exist.
+The OpenSea key remains on Railway and is used only to translate supported NFT
+contract addresses into collection slugs. Unindexed or unsupported collections
+show as pending until a later **Rescan now** successfully resolves the slug.
 
 ## 3. Deploy the dashboard to Vercel
 

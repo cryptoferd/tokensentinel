@@ -4,6 +4,7 @@ import { z } from 'zod';
 
 const envSchema = z.object({
   ALCHEMY_API_KEY: z.string().default(''),
+  OPENSEA_API_KEY: z.string().default(''),
   RPC_URL: z.string().url().default('https://rpc.mainnet.chain.robinhood.com'),
   LIVE_RPC_URL_ETHEREUM: z.string().url().default('https://ethereum-rpc.publicnode.com'),
   LIVE_RPC_URL_BASE: z.string().url().default('https://mainnet.base.org'),

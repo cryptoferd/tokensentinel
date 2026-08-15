@@ -1,19 +1,15 @@
-const openSeaChains:Record<string,string>={
+const dexScreenerChains:Record<string,string>={
+  robinhood:'robinhood',
   ethereum:'ethereum',
   base:'base',
   arbitrum:'arbitrum',
   optimism:'optimism',
-  polygon:'matic',
+  polygon:'polygon',
   bnb:'bsc',
   avalanche:'avalanche',
   linea:'linea'
 };
 
-export const dexScreenerUrl=(address:string)=>`https://dexscreener.com/search?q=${encodeURIComponent(address)}`;
+export const dexScreenerUrl=(chainKey:string,address:string)=>`https://dexscreener.com/${dexScreenerChains[chainKey]??chainKey}/${address}`;
 
-export function openSeaUrl(chainKey:string,address:string){
-  const chain=openSeaChains[chainKey];
-  return chain
-    ? `https://opensea.io/assets/${chain}?search[query]=${encodeURIComponent(address)}`
-    : `https://opensea.io/assets?search[query]=${encodeURIComponent(address)}`;
-}
+export const openSeaUrl=(collectionSlug:string)=>`https://opensea.io/collection/${encodeURIComponent(collectionSlug)}`;

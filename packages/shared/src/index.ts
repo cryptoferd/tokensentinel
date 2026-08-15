@@ -64,6 +64,7 @@ export interface TokenRecord {
   holderCountEstimate: number | null;
   marketCapUsd: number | null;
   liquidityUsd: number | null;
+  openSeaSlug: string | null;
   poolCreated: boolean;
   pools: PoolInfo[];
   topHolders: Holder[];

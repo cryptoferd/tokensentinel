@@ -61,7 +61,7 @@ export async function recordDeployment(input:{chainKey:string;contract:`0x${stri
   const chain=getChain(input.chainKey);const meta=await readDeploymentMetadata(input.chainKey,input.contract); if(!meta)return false;
   const record={chainKey:chain.key,chainId:chain.id,chainName:chain.name,explorerUrl:chain.explorerUrl,address:input.contract.toLowerCase(),assetType:meta.assetType,name:meta.name,symbol:meta.symbol,decimals:meta.decimals,totalSupply:meta.totalSupply?.toString()??null,deployer:input.deployer?.toLowerCase()??null,
     deploymentTx:input.transactionHash,deploymentBlock:input.blockNumber,firstSeenAt:input.timestamp,analysisState:'queued' as const,riskScore:0,riskLabel:'LOW' as const,warnings:[],bytecodeFlags:[],topHolders:[],poolCreated:false,pools:[],verified:null,sourceAvailable:null,
-    owner:null,ownershipRenounced:null,buyTax:null,sellTax:null,top5Percent:null,circulatingTop5Percent:null,holderCountEstimate:null,marketCapUsd:null,liquidityUsd:null,updatedAt:Date.now()};
+    owner:null,ownershipRenounced:null,buyTax:null,sellTax:null,top5Percent:null,circulatingTop5Percent:null,holderCountEstimate:null,marketCapUsd:null,liquidityUsd:null,openSeaSlug:null,updatedAt:Date.now()};
   upsertToken(record); if(input.scanId)attachTokenToScan(input.scanId,input.contract);else attachTokenToActiveLiveScans(input.chainKey,input.contract);
   publish('token:new',record);enqueueAnalysis(input.chainKey,input.contract);return true;
 }

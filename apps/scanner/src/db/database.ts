@@ -74,6 +74,8 @@ if(!columns('tokens').some(column=>column.name==='chain_key')) {
   db.pragma('foreign_keys = ON');
 }
 
+ensureColumn('tokens','opensea_slug','TEXT');
+
 db.exec(`
 CREATE INDEX IF NOT EXISTS idx_tokens_block ON tokens(chain_key,deployment_block DESC);
 CREATE INDEX IF NOT EXISTS idx_tokens_risk ON tokens(chain_key,risk_score DESC);

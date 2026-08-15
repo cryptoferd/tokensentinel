@@ -11,6 +11,7 @@ import { getToken, updateToken, upsertPool } from '../db/repository.js';
 import { scoreRisk } from './riskScore.js';
 import { publish } from '../events.js';
 import { getMarketData } from './marketData.js';
+import { getOpenSeaCollectionSlug } from './openSea.js';
 
 export async function readDeploymentMetadata(chainKey:string,address: `0x${string}`) {
   const client=getClient(chainKey);
@@ -54,6 +55,7 @@ export async function analyzeToken(chainKey:string,addressRaw: string) {
     if (!source.verified) warnings.push({ code:'UNVERIFIED', title:'Source code not verified', severity:'medium', detail:'Blockscout did not return verified source code, reducing the depth of static review.' });
     if (owner && owner !== zeroAddress) warnings.push({ code:'OWNER_ACTIVE', title:'Privileged owner is active', severity:'medium', detail:`owner() currently returns ${owner}. Ownership has not been renounced.` });
     const taxes = assetType==='ERC20' ? await probeTaxes(chainKey,address, source.abi) : {buyTax:null,sellTax:null,warnings:[]}; warnings.push(...taxes.warnings);
+    const openSeaSlug=assetType==='ERC721'?(token.openSeaSlug??await getOpenSeaCollectionSlug(chainKey,address)):null;
 
     const current=getToken(chainKey,address)??token;
     const poolAddresses = current.pools.map(p => p.address);
@@ -75,7 +77,7 @@ export async function analyzeToken(chainKey:string,addressRaw: string) {
       assetType, analysisState: source.verified ? 'complete' : 'partial', riskScore: result.score, riskLabel: result.label, warnings: result.warnings,
       verified: source.verified, sourceAvailable: Boolean(source.source), owner, ownershipRenounced: owner ? owner === zeroAddress : null, buyTax: taxes.buyTax, sellTax: taxes.sellTax,
       top5Percent: holderResult?.top5Percent ?? null, circulatingTop5Percent: holderResult?.circulatingTop5Percent ?? null,
-      holderCountEstimate: holderResult?.holderCountEstimate ?? null, marketCapUsd:market.marketCapUsd, liquidityUsd:market.liquidityUsd,
+      holderCountEstimate: holderResult?.holderCountEstimate ?? null, marketCapUsd:market.marketCapUsd, liquidityUsd:market.liquidityUsd, openSeaSlug,
       topHolders: holderResult?.holders ?? [], bytecodeFlags: flags, updatedAt: Date.now()
     });
     publish('token:update', getToken(chainKey,address));
