@@ -149,7 +149,8 @@ The scanner writes SQLite state and should not be deployed as a stateless Vercel
 For the included Railway + Vercel layout, follow [DEPLOY.md](DEPLOY.md). The
 checked-in `railway.json` configures Docker builds, health checks and restart
 behavior. The checked-in `vercel.json` builds only the shared package and web
-dashboard. Attach exactly one Railway volume and run a single scanner replica
+dashboard, with Vite emitting directly to the root `dist` directory Vercel
+expects. Attach exactly one Railway volume and run a single scanner replica
 while using SQLite.
 
 For multi-instance production deployments, replace SQLite with Postgres and use a single elected scanner/indexer process.

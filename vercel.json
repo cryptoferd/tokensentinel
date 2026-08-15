@@ -3,7 +3,7 @@
   "framework": "vite",
   "installCommand": "npm install --workspace @sentinel/shared --workspace @sentinel/web",
   "buildCommand": "npm run build -w @sentinel/shared && npm run build -w @sentinel/web",
-  "outputDirectory": "apps/web/dist",
+  "outputDirectory": "dist",
   "rewrites": [
     { "source": "/(.*)", "destination": "/index.html" }
   ]
