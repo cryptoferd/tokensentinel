@@ -53,4 +53,50 @@ CREATE TABLE IF NOT EXISTS pools (
 );
 CREATE INDEX IF NOT EXISTS idx_pools_token0 ON pools(token0);
 CREATE INDEX IF NOT EXISTS idx_pools_token1 ON pools(token1);
+CREATE TABLE IF NOT EXISTS auth_challenges (
+  address TEXT PRIMARY KEY,
+  message TEXT NOT NULL,
+  expires_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS auth_sessions (
+  token_hash TEXT PRIMARY KEY,
+  address TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_auth_sessions_address ON auth_sessions(address);
+CREATE TABLE IF NOT EXISTS scan_sessions (
+  id TEXT PRIMARY KEY,
+  user_address TEXT NOT NULL,
+  mode TEXT NOT NULL,
+  duration_minutes INTEGER,
+  lookback_minutes INTEGER,
+  started_at INTEGER NOT NULL,
+  ends_at INTEGER,
+  completed_at INTEGER,
+  status TEXT NOT NULL,
+  from_block INTEGER,
+  to_block INTEGER,
+  scanned_blocks INTEGER NOT NULL DEFAULT 0,
+  total_blocks INTEGER NOT NULL DEFAULT 0,
+  error TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_scan_sessions_user ON scan_sessions(user_address, started_at DESC);
+CREATE TABLE IF NOT EXISTS scan_results (
+  scan_id TEXT NOT NULL,
+  token_address TEXT NOT NULL,
+  discovered_at INTEGER NOT NULL,
+  PRIMARY KEY(scan_id, token_address),
+  FOREIGN KEY(scan_id) REFERENCES scan_sessions(id) ON DELETE CASCADE,
+  FOREIGN KEY(token_address) REFERENCES tokens(address) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_scan_results_scan ON scan_results(scan_id, discovered_at DESC);
 `);
+
+function ensureColumn(table: string, name: string, definition: string) {
+  const columns = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+  if (!columns.some(column => column.name === name)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${definition}`);
+}
+
+ensureColumn('tokens', 'market_cap_usd', 'REAL');
+ensureColumn('tokens', 'liquidity_usd', 'REAL');

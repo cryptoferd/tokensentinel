@@ -1,11 +1,15 @@
 import express from 'express';
 import cors from 'cors';
+import { randomUUID } from 'node:crypto';
 import { config } from '../config.js';
 import { events } from '../events.js';
-import { getToken, listTokens, stats } from '../db/repository.js';
+import { activeLiveScanForUser, createScanSession, getScanSession, getToken, listScanSessions, listScanTokens, listTokens, latestActiveLiveEnd, stats, stopLiveScan } from '../db/repository.js';
 import { client } from '../chain/client.js';
 import { enqueueAnalysis, queueDepth } from '../workers/analysisQueue.js';
 import { runScanner, scannerStatus, stopScanner } from '../workers/blockScanner.js';
+import { createChallenge, gateInfo, logout, requireAuth, verifyGateAndCreateSession } from '../auth.js';
+import { runHistoricalScan } from '../workers/historicalScanner.js';
+import type { TokenFilters } from '@sentinel/shared';
 
 export function createServer() {
   const app = express();
@@ -16,6 +20,18 @@ export function createServer() {
   } }));
 
   app.get('/health', (_req,res) => res.json({ ok:true, chainId:config.CHAIN_ID, rpc:config.RPC_URL.replace(/\/v2\/[^/]+$/, '/v2/***') }));
+  app.get('/api/auth/config',(_req,res)=>res.json(gateInfo));
+  app.post('/api/auth/nonce',(req,res)=>{
+    try { res.json(createChallenge(String(req.body?.address??''))); }
+    catch { res.status(400).json({error:'Enter a valid EVM wallet address.'}); }
+  });
+  app.post('/api/auth/verify',async(req,res)=>{
+    try { res.json(await verifyGateAndCreateSession(String(req.body?.address??''),String(req.body?.signature??'') as `0x${string}`)); }
+    catch(error){ res.status(403).json({error:error instanceof Error?error.message:'Wallet verification failed'}); }
+  });
+  app.use('/api',requireAuth);
+  app.get('/api/auth/me',(req,res)=>res.json({address:req.userAddress,...gateInfo}));
+  app.post('/api/auth/logout',(req,res)=>{logout(req);res.json({ok:true});});
   app.get('/api/tokens', (req,res) => {
     const limit = Math.min(200, Math.max(1, Number(req.query.limit ?? 50)));
     const offset = Math.max(0, Number(req.query.offset ?? 0));
@@ -32,18 +48,44 @@ export function createServer() {
     if (!Number.isInteger(durationMinutes) || durationMinutes < 5 || durationMinutes > 60) {
       return res.status(400).json({ error:'durationMinutes must be a whole number from 5 to 60' });
     }
-    if (scannerStatus().running) return res.status(409).json({ error:'Scanner is already running', ...scannerStatus() });
+    const existing=activeLiveScanForUser(req.userAddress!);
+    if (existing) return res.status(409).json({error:'You already have a live scan running.',scan:existing});
+    const endsAt=Date.now()+durationMinutes*60_000;
+    const scan=createScanSession({id:randomUUID(),userAddress:req.userAddress!,mode:'live',durationMinutes,endsAt});
     void runScanner({ durationMinutes, fromLatest:true }).catch(error => console.error('[scanner] session failed:', error));
-    res.status(202).json({ started:true, ...scannerStatus() });
+    res.status(202).json({ started:true, scan, ...scannerStatus() });
   });
-  app.post('/api/scanner/stop', (_req,res) => {
-    const stopping = stopScanner();
-    res.status(stopping ? 202 : 200).json({ stopping, ...scannerStatus() });
+  app.post('/api/scanner/stop', (req,res) => {
+    const scanId=String(req.body?.scanId??activeLiveScanForUser(req.userAddress!)?.id??'');
+    const stopping=stopLiveScan(scanId,req.userAddress!);
+    if (!latestActiveLiveEnd()) stopScanner();
+    res.status(stopping ? 202 : 200).json({ stopping, scanId, ...scannerStatus() });
   });
-  app.get('/api/stats', async (_req,res) => {
+  app.get('/api/stats', async (req,res) => {
     const s = stats(); const scanner = scannerStatus();
     let latestBlock = scanner.latestKnown; try { latestBlock = Number(await client.getBlockNumber()); } catch {}
-    res.json({ ...s, latestBlock, scannedBlock:scanner.scanned, scannerRunning:scanner.running, scannerStartedAt:scanner.startedAt, scannerEndsAt:scanner.endsAt, queueDepth:queueDepth() });
+    const activeScan=activeLiveScanForUser(req.userAddress!);
+    res.json({ ...s, latestBlock, scannedBlock:scanner.scanned, scannerRunning:Boolean(activeScan), scannerStartedAt:activeScan?.startedAt??null, scannerEndsAt:activeScan?.endsAt??null, queueDepth:queueDepth(),activeScan });
+  });
+  app.post('/api/scans/history',(req,res)=>{
+    const lookbackMinutes=Number(req.body?.lookbackMinutes);
+    if (![5,30,60,180,360,720,1440].includes(lookbackMinutes)) return res.status(400).json({error:'Choose 5m, 30m, 1h, 3h, 6h, 12h or 24h.'});
+    const scan=createScanSession({id:randomUUID(),userAddress:req.userAddress!,mode:'history',lookbackMinutes});
+    void runHistoricalScan(scan.id,lookbackMinutes);
+    res.status(202).json({scan});
+  });
+  app.get('/api/scans',(req,res)=>res.json({items:listScanSessions(req.userAddress!)}));
+  app.get('/api/scans/:id',(req,res)=>{
+    const scan=getScanSession(req.params.id,req.userAddress!); if(!scan)return res.status(404).json({error:'Scan not found'}); res.json(scan);
+  });
+  app.get('/api/scans/:id/results',(req,res)=>{
+    const scan=getScanSession(req.params.id,req.userAddress!); if(!scan)return res.status(404).json({error:'Scan not found'});
+    const number=(name:string)=>typeof req.query[name]==='string'&&req.query[name]!==''?Number(req.query[name]):undefined;
+    const filters:TokenFilters={q:typeof req.query.q==='string'?req.query.q:undefined,risk:typeof req.query.risk==='string'?req.query.risk:undefined,
+      minMarketCap:number('minMarketCap'),maxMarketCap:number('maxMarketCap'),minHolders:number('minHolders'),maxHolders:number('maxHolders'),maxTop5:number('maxTop5'),maxBuyTax:number('maxBuyTax'),maxSellTax:number('maxSellTax'),
+      hasLiquidity:req.query.hasLiquidity==='true'?true:req.query.hasLiquidity==='false'?false:undefined};
+    const limit=Math.min(200,Math.max(1,Number(req.query.limit??100))),offset=Math.max(0,Number(req.query.offset??0));
+    res.json({scan,items:listScanTokens(scan.id,req.userAddress!,filters,limit,offset)});
   });
   app.get('/api/stream', (req,res) => {
     res.setHeader('Content-Type','text/event-stream'); res.setHeader('Cache-Control','no-cache'); res.setHeader('Connection','keep-alive'); res.flushHeaders();

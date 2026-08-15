@@ -2,6 +2,9 @@
 
 An on-demand, timed launch monitor and contract-risk scanner for **Robinhood Chain mainnet (chain ID 4663)**.
 
+Access is token-gated to wallets holding a **Croikeys ERC-721** at
+`0x3b70a5eae51db90bad7e4083341e0c2c0b74dae4` on Ethereum mainnet.
+
 > Research tooling only. A clean result is **not** a guarantee that a token is safe, sellable, fairly launched, or free of malicious behavior.
 
 ## Deploy
@@ -18,6 +21,10 @@ one-click template button after the repository is on GitHub.
 ## What it does
 
 - Runs user-controlled live scanning sessions from **5 to 60 minutes**.
+- Uses a gas-free signed-wallet challenge and server-side Ethereum ownership check.
+- Saves scan sessions and results separately for each authenticated wallet.
+- Backfills launches from the last **5m, 30m, 1h, 3h, 6h, 12h or 24h** through Blockscout's indexed feed.
+- Adds Dexscreener market-cap/liquidity enrichment and filters for market cap, holders, concentration, liquidity and risk.
 - Starts each timed session at the current chain tip and stops automatically at zero.
 - Includes an immediate manual stop control and live countdown.
 - Watches every new block during an active session for **contract-creation transactions**.
@@ -72,7 +79,7 @@ npm run build
 npm start
 ```
 
-`npm start` starts the scanner/API. Serve `apps/web/dist` with any static host and set `VITE_API_URL` before building the frontend to the public scanner API URL.
+`npm start` starts the scanner/API. Serve the repository-level `dist` directory with any static host and set `VITE_API_URL` before building the frontend to the public scanner API URL.
 
 ## Environment variables
 
@@ -88,6 +95,10 @@ npm start
 | `HOLDER_LOOKBACK_BLOCKS` | Maximum holder reconstruction lookback | `50000` |
 | `MAX_TRANSFER_LOGS` | Holder-analysis log safety limit | `20000` |
 | `SCANNER_AUTO_START` | Start continuous scanning when the API boots; keep `false` for timed dashboard sessions | `false` |
+| `GATE_RPC_URL` | Ethereum-mainnet RPC used for Croikey `balanceOf` checks | Public Ethereum endpoint |
+| `GATE_CONTRACT_ADDRESS` | ERC-721 collection required for access | Croikeys contract |
+| `SESSION_TTL_HOURS` | Signed-wallet session lifetime | `168` (7 days) |
+| `MAX_HISTORICAL_TRANSACTIONS` | Safety cap for one indexed lookback job | `250000` |
 | `DB_PATH` | SQLite database location; uses an attached Railway volume automatically when unset | `./sentinel.db` locally |
 | `DEX_V2_FACTORIES` | Optional comma-separated V2 factory allowlist | empty |
 | `DEX_V3_FACTORIES` | Optional comma-separated V3 factory allowlist | empty |
@@ -99,12 +110,18 @@ If the DEX factory lists are empty, canonical V2/V3 pool events from any event e
 ## API
 
 - `GET /health`
+- `GET /api/auth/config`
+- `POST /api/auth/nonce` with `{ "address": "0x..." }`
+- `POST /api/auth/verify` with `{ "address": "0x...", "signature": "0x..." }`
+- All remaining `/api/*` routes require `Authorization: Bearer <session>`.
 - `GET /api/stats`
-- `GET /api/tokens?limit=100&offset=0&q=PEPE&risk=HIGH`
+- `GET /api/scans`
+- `POST /api/scans/history` with `{ "lookbackMinutes": 5|30|60|180|360|720|1440 }`
+- `GET /api/scans/:id/results` with market-cap, holder, LP, concentration, tax, risk and text filters
 - `GET /api/tokens/:address`
 - `POST /api/tokens/:address/rescan`
 - `POST /api/scanner/start` with `{ "durationMinutes": 5..60 }`
-- `POST /api/scanner/stop`
+- `POST /api/scanner/stop` with `{ "scanId": "..." }`
 - `GET /api/stream` — Server-Sent Events
 
 ## Risk model
@@ -149,7 +166,8 @@ The scanner writes SQLite state and should not be deployed as a stateless Vercel
 For the included Railway + Vercel layout, follow [DEPLOY.md](DEPLOY.md). The
 checked-in `railway.json` configures Docker builds, health checks and restart
 behavior. The checked-in `vercel.json` builds only the shared package and web
-dashboard. Attach exactly one Railway volume and run a single scanner replica
+dashboard, with Vite emitting directly to the root `dist` directory Vercel
+expects. Attach exactly one Railway volume and run a single scanner replica
 while using SQLite.
 
 For multi-instance production deployments, replace SQLite with Postgres and use a single elected scanner/indexer process.

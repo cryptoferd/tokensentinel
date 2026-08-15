@@ -47,12 +47,45 @@ export interface TokenRecord {
   top5Percent: number | null;
   circulatingTop5Percent: number | null;
   holderCountEstimate: number | null;
+  marketCapUsd: number | null;
+  liquidityUsd: number | null;
   poolCreated: boolean;
   pools: PoolInfo[];
   topHolders: Holder[];
   warnings: Warning[];
   bytecodeFlags: string[];
   updatedAt: number;
+}
+export type ScanMode = 'live' | 'history';
+export type ScanStatus = 'running' | 'complete' | 'stopped' | 'failed';
+export interface ScanSession {
+  id: string;
+  userAddress: string;
+  mode: ScanMode;
+  durationMinutes: number | null;
+  lookbackMinutes: number | null;
+  startedAt: number;
+  endsAt: number | null;
+  completedAt: number | null;
+  status: ScanStatus;
+  fromBlock: number | null;
+  toBlock: number | null;
+  scannedBlocks: number;
+  totalBlocks: number;
+  resultCount: number;
+  error: string | null;
+}
+export interface TokenFilters {
+  q?: string;
+  risk?: string;
+  minMarketCap?: number;
+  maxMarketCap?: number;
+  minHolders?: number;
+  maxHolders?: number;
+  maxTop5?: number;
+  maxBuyTax?: number;
+  maxSellTax?: number;
+  hasLiquidity?: boolean;
 }
 export interface Stats {
   latestBlock: number;

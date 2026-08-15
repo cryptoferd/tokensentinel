@@ -7,9 +7,10 @@ import { analyzeSource } from './staticRisk.js';
 import { looksLikeMinimalProxy, scanOpcodes } from './bytecode.js';
 import { analyzeHolders } from './holders.js';
 import { probeTaxes } from './taxes.js';
-import { getToken, updateToken } from '../db/repository.js';
+import { getToken, updateToken, upsertPool } from '../db/repository.js';
 import { scoreRisk } from './riskScore.js';
 import { publish } from '../events.js';
+import { getMarketData } from './marketData.js';
 
 export async function readErc20Metadata(address: `0x${string}`) {
   const calls = await Promise.allSettled([
@@ -37,8 +38,8 @@ export async function analyzeToken(addressRaw: string) {
   updateToken(address, { analysisState:'analyzing' }); publish('token:update', { address, analysisState:'analyzing' });
   const warnings: Warning[] = [];
   try {
-    const [code, source, owner, latestBlock] = await Promise.all([
-      client.getBytecode({ address }), getSourceInfo(address), readOwner(address), client.getBlockNumber()
+    const [code, source, owner, latestBlock, market] = await Promise.all([
+      client.getBytecode({ address }), getSourceInfo(address), readOwner(address), client.getBlockNumber(), getMarketData(address)
     ]);
     const flags = scanOpcodes(code);
     const minimalProxy = looksLikeMinimalProxy(code);
@@ -63,11 +64,13 @@ export async function analyzeToken(addressRaw: string) {
     else if (concentration != null && concentration >= 30) warnings.push({ code:'TOP5_MODERATE', title:'Concentrated ownership', severity:'medium', detail:`Top five circulating holders control approximately ${concentration.toFixed(2)}% of reconstructed circulating balances.` });
 
     const result = scoreRisk(warnings);
+    if(market.pair)upsertPool({...market.pair,factory:null,fee:null,createdBlock:null,createdTx:null});
     updateToken(address, {
       analysisState: source.verified ? 'complete' : 'partial', riskScore: result.score, riskLabel: result.label, warnings: result.warnings,
       verified: source.verified, sourceAvailable: Boolean(source.source), owner, ownershipRenounced: owner ? owner === zeroAddress : null, buyTax: taxes.buyTax, sellTax: taxes.sellTax,
       top5Percent: holderResult?.top5Percent ?? null, circulatingTop5Percent: holderResult?.circulatingTop5Percent ?? null,
-      holderCountEstimate: holderResult?.holderCountEstimate ?? null, topHolders: holderResult?.holders ?? [], bytecodeFlags: flags, updatedAt: Date.now()
+      holderCountEstimate: holderResult?.holderCountEstimate ?? null, marketCapUsd:market.marketCapUsd, liquidityUsd:market.liquidityUsd,
+      topHolders: holderResult?.holders ?? [], bytecodeFlags: flags, updatedAt: Date.now()
     });
     publish('token:update', getToken(address));
   } catch (e) {

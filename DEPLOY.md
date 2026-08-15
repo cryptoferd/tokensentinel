@@ -25,6 +25,10 @@ Create an empty GitHub repository and upload the contents of this project so tha
    CORS_ORIGINS=https://*.vercel.app
    START_BLOCK=latest
    SCANNER_AUTO_START=false
+   GATE_RPC_URL=https://ethereum-rpc.publicnode.com
+   GATE_CHAIN_ID=1
+   GATE_CONTRACT_ADDRESS=0x3b70a5eae51db90bad7e4083341e0c2c0b74dae4
+   SESSION_TTL_HOURS=168
    ```
 
    Do not define `PORT`; Railway supplies it automatically. `DB_PATH` can also
@@ -44,11 +48,21 @@ and press **Start Scan**. Each session begins at the current chain tip and stops
 automatically. For frequent one-hour sessions, replace the public `RPC_URL` with
 a dedicated Robinhood Chain endpoint.
 
+`GATE_RPC_URL` is an Ethereum-mainnet RPC used only to verify Croikey ownership.
+The public default is suitable for light use; a dedicated Ethereum provider is
+recommended if login traffic grows. Never place an RPC key in Vercel—the
+ownership check runs only on Railway.
+
+Historical 5m–24h searches use Robinhood Blockscout's indexed transaction feed,
+so they do not require the scanner to have been running continuously. Dexscreener
+enrichment supplies market-cap and liquidity values when a token has an indexed
+Robinhood trading pair.
+
 ## 3. Deploy the dashboard to Vercel
 
 1. In Vercel, choose **Add New → Project** and import the same GitHub repository.
 2. Keep the project root at the repository root. `vercel.json` supplies the Vite
-   build command and `apps/web/dist` output directory.
+   build command and repository-level `dist` output directory.
 3. Add this environment variable for Production, Preview and Development:
 
    ```text
@@ -103,4 +117,6 @@ Once both services are linked to GitHub:
 | Dashboard says API unavailable | Verify `VITE_API_URL` uses the public Railway HTTPS domain, then redeploy Vercel. |
 | Browser reports a CORS error | Add the exact Vercel origin to Railway `CORS_ORIGINS` and redeploy Railway. |
 | Scanner starts over after redeploy | Attach a volume at `/data` and leave `DB_PATH` unset, or set `DB_PATH=/data/sentinel.db`. |
+| Wallet signs but access is denied | Confirm the connected wallet holds a Croikey on Ethereum mainnet and that Railway can reach `GATE_RPC_URL`. |
+| A 24h history job hits its safety limit | Raise `MAX_HISTORICAL_TRANSACTIONS` on Railway or use a shorter window. |
 | Railway repeatedly restarts | Check RPC reachability and ensure the service has only one replica when using SQLite. |

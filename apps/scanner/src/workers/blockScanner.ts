@@ -1,6 +1,6 @@
 import { client } from '../chain/client.js';
 import { config } from '../config.js';
-import { getState, setState, upsertToken } from '../db/repository.js';
+import { attachTokenToActiveLiveScans, attachTokenToScan, getState, latestActiveLiveEnd, setState, upsertToken } from '../db/repository.js';
 import { readErc20Metadata } from '../analysis/analyzer.js';
 import { enqueueAnalysis } from './analysisQueue.js';
 import { scanPools } from './poolWatcher.js';
@@ -39,7 +39,7 @@ async function initialBlock(fromLatest: boolean) {
   return requested > latest ? latest : requested;
 }
 
-async function scanDeployments(blockNumber: bigint) {
+export async function scanDeployments(blockNumber: bigint, scanId?:string) {
   const block = await client.getBlock({ blockNumber, includeTransactions:true });
   const creations = block.transactions.filter((tx:any) => tx.to === null);
   for (const tx of creations as any[]) {
@@ -47,19 +47,20 @@ async function scanDeployments(blockNumber: bigint) {
       const receipt = await client.getTransactionReceipt({ hash:tx.hash });
       const contract = receipt.contractAddress;
       if (!contract) continue;
-      const meta = await readErc20Metadata(contract);
-      if (!meta) continue;
-      const record = {
-        address:contract.toLowerCase(), name:meta.name, symbol:meta.symbol, decimals:meta.decimals, totalSupply:meta.totalSupply.toString(),
-        deployer:tx.from?.toLowerCase() ?? null, deploymentTx:tx.hash, deploymentBlock:Number(blockNumber), firstSeenAt:Date.now(), analysisState:'queued' as const,
-        riskScore:0, riskLabel:'LOW' as const, warnings:[], bytecodeFlags:[], topHolders:[], poolCreated:false, pools:[], verified:null, sourceAvailable:null,
-        owner:null, ownershipRenounced:null, buyTax:null, sellTax:null, top5Percent:null, circulatingTop5Percent:null, holderCountEstimate:null, updatedAt:Date.now()
-      };
-      upsertToken(record); publish('token:new', record); enqueueAnalysis(contract);
+      await recordDeployment({contract,deployer:tx.from??null,transactionHash:tx.hash,blockNumber:Number(blockNumber),timestamp:Number(block.timestamp)*1000,scanId});
     } catch (e) {
       console.warn(`[scanner] deployment probe failed in block ${blockNumber}:`, e instanceof Error ? e.message : e);
     }
   }
+}
+
+export async function recordDeployment(input:{contract:`0x${string}`;deployer:string|null;transactionHash:string;blockNumber:number;timestamp:number;scanId?:string}) {
+  const meta=await readErc20Metadata(input.contract); if(!meta)return false;
+  const record={address:input.contract.toLowerCase(),name:meta.name,symbol:meta.symbol,decimals:meta.decimals,totalSupply:meta.totalSupply.toString(),deployer:input.deployer?.toLowerCase()??null,
+    deploymentTx:input.transactionHash,deploymentBlock:input.blockNumber,firstSeenAt:input.timestamp,analysisState:'queued' as const,riskScore:0,riskLabel:'LOW' as const,warnings:[],bytecodeFlags:[],topHolders:[],poolCreated:false,pools:[],verified:null,sourceAvailable:null,
+    owner:null,ownershipRenounced:null,buyTax:null,sellTax:null,top5Percent:null,circulatingTop5Percent:null,holderCountEstimate:null,marketCapUsd:null,liquidityUsd:null,updatedAt:Date.now()};
+  upsertToken(record); if(input.scanId)attachTokenToScan(input.scanId,input.contract);else attachTokenToActiveLiveScans(input.contract);
+  publish('token:new',record);enqueueAnalysis(input.contract);return true;
 }
 
 async function scanOne(blockNumber: bigint) {
@@ -69,7 +70,7 @@ async function scanOne(blockNumber: bigint) {
 }
 
 export async function runScanner(options: { durationMinutes?: number; fromLatest?: boolean } = {}) {
-  if (running) return false;
+  if (running) { const activeEnd=latestActiveLiveEnd(); if (activeEnd && (!endsAt || activeEnd>endsAt)) endsAt=activeEnd; return false; }
   running = true; stopRequested = false;
   startedAt = Date.now();
   endsAt = options.durationMinutes ? startedAt + options.durationMinutes * 60_000 : null;
@@ -78,7 +79,10 @@ export async function runScanner(options: { durationMinutes?: number; fromLatest
   try {
     let next = await initialBlock(options.fromLatest ?? true);
     console.log(`[scanner] starting at block ${next}`);
-    while (!stopRequested && (endsAt === null || Date.now() < endsAt)) {
+    while (!stopRequested) {
+      const activeEnd=latestActiveLiveEnd();
+      if (activeEnd && (!endsAt || activeEnd>endsAt)) endsAt=activeEnd;
+      if (endsAt !== null && Date.now()>=endsAt) break;
       try {
         const tip = await client.getBlockNumber(); latestKnown = tip;
         const target = tip - BigInt(config.CONFIRMATIONS);
