@@ -14,19 +14,24 @@ const formatRemaining=(ms:number)=>{const seconds=Math.max(0,Math.ceil(ms/1000))
 const scanLabel=(scan:ScanSession)=>scan.mode==='live'?`${scan.durationMinutes}m live scan`:`Last ${WINDOWS.find(item=>item.value===scan.lookbackMinutes)?.label??`${scan.lookbackMinutes}m`}`;
 
 function Login({onLogin}:{onLogin:(address:string)=>void}) {
-  const [busy,setBusy]=useState(false); const [error,setError]=useState('');
-  async function connect(){
-    if(!window.ethereum){setError('No injected EVM wallet found. Install MetaMask, Rabby, Coinbase Wallet, or another browser wallet.');return;}
+  const [busy,setBusy]=useState(false); const [error,setError]=useState(''); const [providers,setProviders]=useState<EIP6963ProviderDetail[]>([]);
+  useEffect(()=>{
+    const announce=(event:Event)=>{const detail=(event as CustomEvent<EIP6963ProviderDetail>).detail;if(!detail?.info?.uuid||!detail.provider)return;setProviders(current=>current.some(item=>item.info.uuid===detail.info.uuid)?current:[...current,detail]);};
+    window.addEventListener('eip6963:announceProvider',announce); window.dispatchEvent(new Event('eip6963:requestProvider'));
+    const fallback=window.setTimeout(()=>{if(!window.ethereum)return;setProviders(current=>current.length?current:[{info:{uuid:'legacy-injected',name:window.ethereum?.isMetaMask?'MetaMask':window.ethereum?.isRabby?'Rabby':window.ethereum?.isCoinbaseWallet?'Coinbase Wallet':'Browser Wallet',icon:'',rdns:'legacy'},provider:window.ethereum!}]);},250);
+    return()=>{window.clearTimeout(fallback);window.removeEventListener('eip6963:announceProvider',announce);};
+  },[]);
+  async function connect(provider:EthereumProvider){
     setBusy(true);setError('');
     try{
-      const wallet=createWalletClient({transport:custom(window.ethereum)});
+      const wallet=createWalletClient({transport:custom(provider)});
       const [account]=await wallet.requestAddresses(); if(!account)throw new Error('No wallet account selected.');
       const address=getAddress(account); const challenge=await authNonce(address);
       const signature=await wallet.signMessage({account:address,message:challenge.message});
       const session=await authVerify(address,signature); saveSessionToken(session.token); onLogin(session.address);
-    }catch(error){setError(error instanceof Error?error.message:String(error));}finally{setBusy(false);}
+    }catch(error){const message=error instanceof Error?error.message:String(error);setError(/rejected|denied/i.test(message)?'Wallet connection was cancelled. Unlock the wallet, select at least one account, and approve both prompts.':/at least one account|no wallet account/i.test(message)?'That wallet has no available account. Unlock it and select an account first.':message);}finally{setBusy(false);}
   }
-  return <main className="login-page"><section className="gate-card"><div className="gate-mark"><ShieldCheck/></div><div className="eyebrow">PRIVATE ACCESS / CROIKEYS HOLDERS</div><h1>ROBINHOOD<br/>TOKEN SENTINEL</h1><p>Connect an EVM wallet and sign a gas-free message. Access is granted only when the wallet holds at least one Croikey on Ethereum.</p><button className="connect-button" onClick={connect} disabled={busy}><Wallet size={18}/>{busy?'VERIFYING WALLET…':'CONNECT & VERIFY WALLET'}</button>{error&&<div className="gate-error">{error}</div>}<small>No transaction or wallet permission beyond message signing is requested.</small></section></main>;
+  return <main className="login-page"><section className="gate-card"><div className="gate-mark"><ShieldCheck/></div><div className="eyebrow">PRIVATE ACCESS / CROIKEYS HOLDERS</div><h1>ROBINHOOD<br/>TOKEN SENTINEL</h1><p>Choose the wallet containing your Croikey, then sign a gas-free login message.</p><div className="provider-list">{providers.map(item=><button className="connect-button" key={item.info.uuid} onClick={()=>connect(item.provider)} disabled={busy}>{item.info.icon?<img src={item.info.icon} alt=""/>:<Wallet size={18}/>}<span>{busy?'VERIFYING WALLET…':`CONTINUE WITH ${item.info.name.toUpperCase()}`}</span></button>)}{!providers.length&&<div className="wallet-searching">Searching for installed wallets…</div>}</div>{error&&<div className="gate-error">{error}</div>}<small>No transaction or wallet permission beyond message signing is requested.</small></section></main>;
 }
 
 export default function App(){
