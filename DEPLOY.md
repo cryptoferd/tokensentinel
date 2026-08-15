@@ -48,7 +48,7 @@ a dedicated Robinhood Chain endpoint.
 
 1. In Vercel, choose **Add New → Project** and import the same GitHub repository.
 2. Keep the project root at the repository root. `vercel.json` supplies the Vite
-   build command and repository-level `dist` output directory.
+   build command and `apps/web/dist` output directory.
 3. Add this environment variable for Production, Preview and Development:
 
    ```text
