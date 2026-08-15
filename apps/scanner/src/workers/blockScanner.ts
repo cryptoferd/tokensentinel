@@ -1,4 +1,4 @@
-import { getChain, getClient } from '../chain/chains.js';
+import { getChain, getClient, sanitizeRpcError } from '../chain/chains.js';
 import { config } from '../config.js';
 import { attachTokenToActiveLiveScans, attachTokenToScan, getState, latestActiveLiveEnd, setState, upsertToken } from '../db/repository.js';
 import { readDeploymentMetadata } from '../analysis/analyzer.js';
@@ -52,7 +52,7 @@ export async function scanDeployments(chainKey:string,blockNumber: bigint, scanI
       if (!contract) continue;
       await recordDeployment({chainKey,contract,deployer:tx.from??null,transactionHash:tx.hash,blockNumber:Number(blockNumber),timestamp:Number(block.timestamp)*1000,scanId});
     } catch (e) {
-      console.warn(`[scanner] deployment probe failed in block ${blockNumber}:`, e instanceof Error ? e.message : e);
+      console.warn(`[scanner] deployment probe failed in block ${blockNumber}:`, sanitizeRpcError(e));
     }
   }
 }
@@ -96,7 +96,7 @@ export async function runScanner(options: { chainKey?:string;durationMinutes?: n
           await scanOne(chainKey,next); next++; count++;
         }
       } catch (e) {
-        console.error('[scanner] tick error:', e instanceof Error ? e.message : e);
+        console.error('[scanner] tick error:', sanitizeRpcError(e));
       }
       await new Promise(r => setTimeout(r, config.POLL_INTERVAL_MS));
     }

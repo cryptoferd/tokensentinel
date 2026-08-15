@@ -41,3 +41,26 @@ export function getClient(key:string) {
   clients.set(key,client);return client;
 }
 export const chainOptions=():ChainOption[]=>CHAINS.map(chain=>({key:chain.key,id:chain.id,name:chain.name,shortName:chain.shortName,explorerUrl:chain.explorerUrl,enabled:Boolean(config.ALCHEMY_API_KEY||chain.fallbackRpc)}));
+
+interface PaceState { tail:Promise<void>;lastStarted:number;cooldownUntil:number }
+const paceStates=new Map<string,PaceState>();
+const sleep=(ms:number)=>new Promise(resolve=>setTimeout(resolve,ms));
+function paceState(chainKey:string){let state=paceStates.get(chainKey);if(!state){state={tail:Promise.resolve(),lastStarted:0,cooldownUntil:0};paceStates.set(chainKey,state);}return state;}
+async function acquireRequestSlot(chainKey:string){
+  const state=paceState(chainKey);let release!:()=>void;const prior=state.tail;state.tail=new Promise<void>(resolve=>{release=resolve;});
+  await prior;const waitUntil=Math.max(state.lastStarted+config.RPC_REQUEST_INTERVAL_MS,state.cooldownUntil);const delay=waitUntil-Date.now();if(delay>0)await sleep(delay);state.lastStarted=Date.now();release();
+}
+const isRateLimit=(error:unknown)=>/\b429\b|too many requests|rate.?limit/i.test(error instanceof Error?error.message:String(error));
+export async function pacedRpc<T>(chainKey:string,work:()=>Promise<T>):Promise<T>{
+  let lastError:unknown;
+  for(let attempt=0;attempt<=config.RPC_RATE_LIMIT_RETRIES;attempt++){
+    await acquireRequestSlot(chainKey);
+    try{return await work();}catch(error){lastError=error;if(!isRateLimit(error)||attempt===config.RPC_RATE_LIMIT_RETRIES)throw error;const delay=Math.min(30_000,1_000*2**attempt)+Math.floor(Math.random()*500);paceState(chainKey).cooldownUntil=Math.max(paceState(chainKey).cooldownUntil,Date.now()+delay);}
+  }
+  throw lastError;
+}
+export function sanitizeRpcError(error:unknown){
+  let message=error instanceof Error?error.message:String(error);
+  if(config.ALCHEMY_API_KEY)message=message.split(config.ALCHEMY_API_KEY).join('***');
+  return message.replace(/(\.g\.alchemy\.com\/v2\/)[^\s/?]+/gi,'$1***');
+}

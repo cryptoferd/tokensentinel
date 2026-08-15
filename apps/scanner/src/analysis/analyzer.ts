@@ -1,6 +1,6 @@
 import type { Warning } from '@sentinel/shared';
 import { zeroAddress } from 'viem';
-import { getClient } from '../chain/chains.js';
+import { getClient, sanitizeRpcError } from '../chain/chains.js';
 import { erc165Abi, erc20Abi } from '../chain/abis.js';
 import { getSourceInfo } from './blockscout.js';
 import { analyzeSource } from './staticRisk.js';
@@ -60,7 +60,7 @@ export async function analyzeToken(chainKey:string,addressRaw: string) {
     let holderResult = null;
     if (assetType==='ERC20' && current.totalSupply) {
       try { holderResult = await analyzeHolders(chainKey,address, BigInt(current.deploymentBlock), await client.getBlockNumber(), BigInt(current.totalSupply), poolAddresses); }
-      catch (e) { warnings.push({ code:'HOLDER_PARTIAL', title:'Holder analysis incomplete', severity:'info', detail:`Transfer-log holder reconstruction could not complete: ${e instanceof Error ? e.message : String(e)}` }); }
+      catch (e) { warnings.push({ code:'HOLDER_PARTIAL', title:'Holder analysis incomplete', severity:'info', detail:`Transfer-log holder reconstruction could not complete: ${sanitizeRpcError(e)}` }); }
     }
     if (holderResult?.truncated) warnings.push({ code:'HOLDER_TRUNCATED', title:'Holder data is partial', severity:'info', detail:'Transfer-log reconstruction hit its configured lookback/log limit. Concentration figures may be incomplete.' });
     const concentration = holderResult?.circulatingTop5Percent ?? holderResult?.top5Percent ?? null;
@@ -80,7 +80,7 @@ export async function analyzeToken(chainKey:string,addressRaw: string) {
     });
     publish('token:update', getToken(chainKey,address));
   } catch (e) {
-    warnings.push({ code:'ANALYSIS_ERROR', title:'Analysis error', severity:'info', detail:e instanceof Error ? e.message : String(e) });
+    warnings.push({ code:'ANALYSIS_ERROR', title:'Analysis error', severity:'info', detail:sanitizeRpcError(e) });
     const result = scoreRisk(warnings);
     updateToken(chainKey,address, { analysisState:'failed', warnings:result.warnings, riskScore:result.score, riskLabel:result.label, updatedAt:Date.now() });
     publish('token:update', getToken(chainKey,address));

@@ -27,6 +27,8 @@ const envSchema = z.object({
   SESSION_TTL_HOURS: z.coerce.number().int().min(1).max(720).default(168),
   AUTH_CHALLENGE_TTL_MINUTES: z.coerce.number().int().min(1).max(60).default(10),
   HISTORICAL_CONCURRENCY: z.coerce.number().int().min(1).max(12).default(8),
+  RPC_REQUEST_INTERVAL_MS: z.coerce.number().int().min(25).max(5000).default(150),
+  RPC_RATE_LIMIT_RETRIES: z.coerce.number().int().min(1).max(10).default(6),
   MAX_HISTORICAL_BLOCKS: z.coerce.number().int().min(100).max(1000000).default(400000),
   DEX_V2_FACTORIES: z.string().default(''),
   DEX_V3_FACTORIES: z.string().default(''),

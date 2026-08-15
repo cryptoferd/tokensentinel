@@ -102,6 +102,8 @@ npm start
 | `GATE_CONTRACT_ADDRESS` | ERC-721 collection required for access | Croikeys contract |
 | `SESSION_TTL_HOURS` | Signed-wallet session lifetime | `168` (7 days) |
 | `HISTORICAL_CONCURRENCY` | Parallel historical block requests | `8` |
+| `RPC_REQUEST_INTERVAL_MS` | Minimum spacing between historical RPC request starts; raise it if your plan returns 429 errors | `150` |
+| `RPC_RATE_LIMIT_RETRIES` | Exponential-backoff retries for Alchemy 429 responses | `6` |
 | `MAX_HISTORICAL_BLOCKS` | Safety cap for one lookback job | `400000` |
 | `DB_PATH` | SQLite database location; uses an attached Railway volume automatically when unset | `./sentinel.db` locally |
 | `DEX_V2_FACTORIES` | Optional comma-separated V2 factory allowlist | empty |

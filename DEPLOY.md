@@ -120,4 +120,5 @@ Once both services are linked to GitHub:
 | Scanner starts over after redeploy | Attach a volume at `/data` and leave `DB_PATH` unset, or set `DB_PATH=/data/sentinel.db`. |
 | Wallet signs but access is denied | Confirm the connected wallet holds a Croikey on Ethereum mainnet and that Railway can reach `GATE_RPC_URL`. |
 | A 24h history job hits its safety limit | Raise `MAX_HISTORICAL_BLOCKS` on Railway or use a shorter window. |
+| Alchemy returns HTTP 429 | Keep `RPC_REQUEST_INTERVAL_MS=150`; raise it to `250` on a more restrictive plan. The scanner retries 429 responses automatically. |
 | Railway repeatedly restarts | Check RPC reachability and ensure the service has only one replica when using SQLite. |

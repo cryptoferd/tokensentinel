@@ -3,6 +3,7 @@ import type { TokenRecord } from '@sentinel/shared';
 import { getMarketData } from '../analysis/marketData.js';
 import { getToken, updateToken, upsertPool } from '../db/repository.js';
 import { publish } from '../events.js';
+import { sanitizeRpcError } from '../chain/chains.js';
 
 const limit=pLimit(3);
 const queued=new Set<string>();
@@ -25,7 +26,7 @@ export function enqueueMarketRefresh(token:TokenRecord) {
         updateToken(token.chainKey,address,{marketCapUsd:market.marketCapUsd,liquidityUsd:market.liquidityUsd,updatedAt:Date.now()});
         publish('token:update',getToken(token.chainKey,address));
       }
-    }catch(error){console.warn(`[market] refresh failed for ${address}:`,error instanceof Error?error.message:error);}
+    }catch(error){console.warn(`[market] refresh failed for ${address}:`,sanitizeRpcError(error));}
     finally{queued.delete(key);}
   });
 }
