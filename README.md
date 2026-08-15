@@ -1,6 +1,6 @@
-# Robinhood Token Sentinel
+# Multichain Token Sentinel
 
-An on-demand, timed launch monitor and contract-risk scanner for **Robinhood Chain mainnet (chain ID 4663)**.
+An on-demand, timed launch monitor and contract-risk scanner for major EVM mainnets. Each scan targets one selected network.
 
 Access is token-gated to wallets holding a **Croikeys ERC-721** at
 `0x3b70a5eae51db90bad7e4083341e0c2c0b74dae4` on Ethereum mainnet.
@@ -23,7 +23,8 @@ one-click template button after the repository is on GitHub.
 - Runs user-controlled live scanning sessions from **5 to 60 minutes**.
 - Uses a gas-free signed-wallet challenge and server-side Ethereum ownership check.
 - Saves scan sessions and results separately for each authenticated wallet.
-- Backfills launches from the last **5m, 30m, 1h, 3h, 6h, 12h or 24h** through Blockscout's indexed feed.
+- Selects Robinhood, Ethereum, Base, Arbitrum, Optimism, Polygon, BNB Chain, Avalanche or Linea per scan.
+- Backfills launches from the last **5m, 30m, 1h, 3h, 6h, 12h or 24h** using concurrent Alchemy block-range scanning.
 - Adds Dexscreener market-cap/liquidity enrichment and filters for market cap, holders, concentration, liquidity and risk.
 - Starts each timed session at the current chain tip and stops automatically at zero.
 - Includes an immediate manual stop control and live countdown.
@@ -31,7 +32,7 @@ one-click template button after the repository is on GitHub.
 - Classifies new deployments as ERC-20 or ERC-721 using ERC-165 plus contract metadata probes.
 - Lets each live or historical scan target Tokens, NFTs, or Both; new scans default to ERC-20 tokens.
 - Detects canonical **Uniswap V2-style `PairCreated`** and **V3-style `PoolCreated`** events chain-wide.
-- Stores discoveries in SQLite so page reloads do not rescan chain history.
+- Stores discoveries by chain ID and address in SQLite so identical addresses on different networks never collide.
 - Pulls verified source/ABI information from Robinhood Chain Blockscout.
 - Flags blacklist, pause/trading controls, minting, mutable fees/taxes, max-wallet/max-tx controls, whitelist/exemptions, cooldowns, proxy/upgrade patterns, assembly and delegatecall patterns.
 - Scans runtime bytecode for notable opcodes while correctly skipping PUSH data.
@@ -86,7 +87,8 @@ npm start
 
 | Variable | Purpose | Default |
 |---|---|---|
-| `RPC_URL` | JSON-RPC endpoint | Official public RPC |
+| `ALCHEMY_API_KEY` | Railway-only key used to access all selectable EVM RPC endpoints | empty |
+| `RPC_URL` | Robinhood fallback RPC when Alchemy is not configured | Official public RPC |
 | `CHAIN_ID` | Robinhood mainnet chain ID | `4663` |
 | `BLOCKSCOUT_API_URL` | Explorer API | Robinhood Blockscout `/api` |
 | `START_BLOCK` | First block if no DB cursor exists | `latest` |
@@ -99,7 +101,8 @@ npm start
 | `GATE_RPC_URL` | Ethereum-mainnet RPC used for Croikey `balanceOf` checks | Public Ethereum endpoint |
 | `GATE_CONTRACT_ADDRESS` | ERC-721 collection required for access | Croikeys contract |
 | `SESSION_TTL_HOURS` | Signed-wallet session lifetime | `168` (7 days) |
-| `MAX_HISTORICAL_TRANSACTIONS` | Safety cap for one indexed lookback job | `250000` |
+| `HISTORICAL_CONCURRENCY` | Parallel historical block requests | `8` |
+| `MAX_HISTORICAL_BLOCKS` | Safety cap for one lookback job | `400000` |
 | `DB_PATH` | SQLite database location; uses an attached Railway volume automatically when unset | `./sentinel.db` locally |
 | `DEX_V2_FACTORIES` | Optional comma-separated V2 factory allowlist | empty |
 | `DEX_V3_FACTORIES` | Optional comma-separated V3 factory allowlist | empty |
@@ -116,13 +119,14 @@ If the DEX factory lists are empty, canonical V2/V3 pool events from any event e
 - `POST /api/auth/verify` with `{ "address": "0x...", "signature": "0x..." }`
 - All remaining `/api/*` routes require `Authorization: Bearer <session>`.
 - `GET /api/stats`
+- `GET /api/chains`
 - `GET /api/scans`
 - `DELETE /api/scans/:id` — deletes one completed/failed/stopped scan owned by the authenticated wallet
-- `POST /api/scans/history` with `{ "lookbackMinutes": 5|30|60|180|360|720|1440, "assetType": "ERC20"|"ERC721"|"BOTH" }`
+- `POST /api/scans/history` with `{ "chainKey": "ethereum", "lookbackMinutes": 5|30|60|180|360|720|1440, "assetType": "ERC20"|"ERC721"|"BOTH" }`
 - `GET /api/scans/:id/results` with market-cap, holder, LP, concentration, tax, risk and text filters
 - `GET /api/tokens/:address`
 - `POST /api/tokens/:address/rescan`
-- `POST /api/scanner/start` with `{ "durationMinutes": 5..60, "assetType": "ERC20"|"ERC721"|"BOTH" }`
+- `POST /api/scanner/start` with `{ "chainKey": "ethereum", "durationMinutes": 5..60, "assetType": "ERC20"|"ERC721"|"BOTH" }`
 - `POST /api/scanner/stop` with `{ "scanId": "..." }`
 - `GET /api/stream` — Server-Sent Events
 

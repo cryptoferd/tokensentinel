@@ -1,27 +1,27 @@
 import type { Warning } from '@sentinel/shared';
-import { client } from '../chain/client.js';
+import { getClient } from '../chain/chains.js';
 
 interface FnAbi { type?: string; name?: string; stateMutability?: string; inputs?: unknown[]; outputs?: unknown[] }
 const buyRe = /(buy.*(tax|fee)|(tax|fee).*buy)/i;
 const sellRe = /(sell.*(tax|fee)|(tax|fee).*sell)/i;
 const denomRe = /(tax|fee).*(denom|divisor)|denom.*(tax|fee)|feeDenominator|taxDenominator/i;
 
-async function callUint(address: `0x${string}`, fn: FnAbi): Promise<bigint | null> {
+async function callUint(chainKey:string,address: `0x${string}`, fn: FnAbi): Promise<bigint | null> {
   try {
     const abi = [fn] as any;
-    const value = await client.readContract({ address, abi, functionName: fn.name! } as any);
+    const value = await getClient(chainKey).readContract({ address, abi, functionName: fn.name! } as any);
     return typeof value === 'bigint' ? value : typeof value === 'number' ? BigInt(value) : null;
   } catch { return null; }
 }
 
-export async function probeTaxes(address: `0x${string}`, abi: unknown[] | null) {
+export async function probeTaxes(chainKey:string,address: `0x${string}`, abi: unknown[] | null) {
   if (!abi) return { buyTax: null as number|null, sellTax: null as number|null, warnings: [] as Warning[], evidence: [] as string[] };
   const funcs = (abi as FnAbi[]).filter(x => x?.type === 'function' && x.name && (x.inputs?.length ?? 0) === 0 && (x.outputs?.length ?? 0) === 1);
   const denomFn = funcs.find(x => denomRe.test(x.name!));
-  const denom = denomFn ? await callUint(address, denomFn) : null;
+  const denom = denomFn ? await callUint(chainKey,address, denomFn) : null;
   async function find(re: RegExp) {
     for (const fn of funcs.filter(x => re.test(x.name!)).slice(0,6)) {
-      const raw = await callUint(address, fn);
+      const raw = await callUint(chainKey,address, fn);
       if (raw == null) continue;
       let percent: number | null = null;
       if (denom && denom > 0n) percent = Number(raw * 1_000_000n / denom) / 10_000;

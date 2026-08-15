@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { config } from '../config.js';
 import { events } from '../events.js';
 import { activeLiveScanForUser, createScanSession, deleteScanSession, getScanSession, getToken, listScanSessions, listScanTokens, listTokens, latestActiveLiveEnd, stats, stopLiveScan } from '../db/repository.js';
-import { client } from '../chain/client.js';
+import { chainOptions, getChain, getClient } from '../chain/chains.js';
 import { enqueueAnalysis, queueDepth } from '../workers/analysisQueue.js';
 import { runScanner, scannerStatus, stopScanner } from '../workers/blockScanner.js';
 import { createChallenge, gateInfo, logout, requireAuth, verifyGateAndCreateSession } from '../auth.js';
@@ -21,7 +21,7 @@ export function createServer() {
   } }));
   app.use('/api',(_req,res,next)=>{res.setHeader('Cache-Control','no-store, no-cache, must-revalidate, proxy-revalidate');res.setHeader('Pragma','no-cache');res.setHeader('Expires','0');next();});
 
-  app.get('/health', (_req,res) => res.json({ ok:true, chainId:config.CHAIN_ID, rpc:config.RPC_URL.replace(/\/v2\/[^/]+$/, '/v2/***') }));
+  app.get('/health', (_req,res) => res.json({ ok:true, chains:chainOptions().filter(chain=>chain.enabled).map(chain=>chain.key),alchemyConfigured:Boolean(config.ALCHEMY_API_KEY) }));
   app.get('/api/auth/config',(_req,res)=>res.json(gateInfo));
   app.post('/api/auth/nonce',(req,res)=>{
     try { res.json(createChallenge(String(req.body?.address??''))); }
@@ -32,18 +32,19 @@ export function createServer() {
     catch(error){ res.status(403).json({error:error instanceof Error?error.message:'Wallet verification failed'}); }
   });
   app.use('/api',requireAuth);
+  app.get('/api/chains',(_req,res)=>res.json({items:chainOptions()}));
   app.get('/api/auth/me',(req,res)=>res.json({address:req.userAddress,...gateInfo}));
   app.post('/api/auth/logout',(req,res)=>{logout(req);res.json({ok:true});});
   app.get('/api/tokens', (req,res) => {
     const limit = Math.min(200, Math.max(1, Number(req.query.limit ?? 50)));
     const offset = Math.max(0, Number(req.query.offset ?? 0));
-    res.json({ items:listTokens({ limit, offset, risk:typeof req.query.risk === 'string' ? req.query.risk : undefined, q:typeof req.query.q === 'string' ? req.query.q : undefined }) });
+    res.json({ items:listTokens({ limit, offset, chainKey:typeof req.query.chainKey==='string'?req.query.chainKey:undefined,risk:typeof req.query.risk === 'string' ? req.query.risk : undefined, q:typeof req.query.q === 'string' ? req.query.q : undefined }) });
   });
   app.get('/api/tokens/:address', (req,res) => {
-    const token = getToken(req.params.address); if (!token) return res.status(404).json({ error:'Token not found' }); enqueueMarketRefresh(token);res.json(token);
+    const chainKey=String(req.query.chainKey??'robinhood');const token = getToken(chainKey,req.params.address); if (!token) return res.status(404).json({ error:'Token not found' }); enqueueMarketRefresh(token);res.json(token);
   });
   app.post('/api/tokens/:address/rescan', (req,res) => {
-    const token = getToken(req.params.address); if (!token) return res.status(404).json({ error:'Token not found' }); enqueueAnalysis(token.address); res.status(202).json({ queued:true });
+    const chainKey=String(req.query.chainKey??req.body?.chainKey??'robinhood');const token = getToken(chainKey,req.params.address); if (!token) return res.status(404).json({ error:'Token not found' }); enqueueAnalysis(chainKey,token.address); res.status(202).json({ queued:true });
   });
   app.post('/api/scanner/start', (req,res) => {
     const durationMinutes = Number(req.body?.durationMinutes);
@@ -52,11 +53,13 @@ export function createServer() {
     }
     const assetType=parseAssetType(req.body?.assetType);
     if(!assetType)return res.status(400).json({error:'assetType must be ERC20, ERC721 or BOTH'});
+    const chain=resolveChain(req.body?.chainKey);if(!chain)return res.status(400).json({error:'Choose a supported, enabled chain.'});
+    const status=scannerStatus();if(status.running&&status.chainKey!==chain.key)return res.status(409).json({error:`The live scanner is currently monitoring ${getChain(status.chainKey!).name}. Stop it before switching chains.`});
     const existing=activeLiveScanForUser(req.userAddress!);
     if (existing) return res.status(409).json({error:'You already have a live scan running.',scan:existing});
     const endsAt=Date.now()+durationMinutes*60_000;
-    const scan=createScanSession({id:randomUUID(),userAddress:req.userAddress!,mode:'live',assetType,durationMinutes,endsAt});
-    void runScanner({ durationMinutes, fromLatest:true }).catch(error => console.error('[scanner] session failed:', error));
+    const scan=createScanSession({id:randomUUID(),userAddress:req.userAddress!,mode:'live',assetType,chain,durationMinutes,endsAt});
+    void runScanner({ chainKey:chain.key,durationMinutes, fromLatest:true }).catch(error => console.error('[scanner] session failed:', error));
     res.status(202).json({ started:true, scan, ...scannerStatus() });
   });
   app.post('/api/scanner/stop', (req,res) => {
@@ -66,8 +69,8 @@ export function createServer() {
     res.status(stopping ? 202 : 200).json({ stopping, scanId, ...scannerStatus() });
   });
   app.get('/api/stats', async (req,res) => {
-    const s = stats(); const scanner = scannerStatus();
-    let latestBlock = scanner.latestKnown; try { latestBlock = Number(await client.getBlockNumber()); } catch {}
+    const s = stats();const requestedChain=String(req.query.chainKey??'robinhood'); const scanner = scannerStatus(requestedChain);
+    let latestBlock = scanner.chainKey===requestedChain?scanner.latestKnown:0; try { latestBlock = Number(await getClient(requestedChain).getBlockNumber()); } catch {}
     const activeScan=activeLiveScanForUser(req.userAddress!);
     res.json({ ...s, latestBlock, scannedBlock:scanner.scanned, scannerRunning:Boolean(activeScan), scannerStartedAt:activeScan?.startedAt??null, scannerEndsAt:activeScan?.endsAt??null, queueDepth:queueDepth(),activeScan });
   });
@@ -76,8 +79,9 @@ export function createServer() {
     if (![5,30,60,180,360,720,1440].includes(lookbackMinutes)) return res.status(400).json({error:'Choose 5m, 30m, 1h, 3h, 6h, 12h or 24h.'});
     const assetType=parseAssetType(req.body?.assetType);
     if(!assetType)return res.status(400).json({error:'assetType must be ERC20, ERC721 or BOTH'});
-    const scan=createScanSession({id:randomUUID(),userAddress:req.userAddress!,mode:'history',assetType,lookbackMinutes});
-    void runHistoricalScan(scan.id,lookbackMinutes);
+    const chain=resolveChain(req.body?.chainKey);if(!chain)return res.status(400).json({error:'Choose a supported, enabled chain.'});
+    const scan=createScanSession({id:randomUUID(),userAddress:req.userAddress!,mode:'history',assetType,chain,lookbackMinutes});
+    void runHistoricalScan(scan.id,chain.key,lookbackMinutes);
     res.status(202).json({scan});
   });
   app.get('/api/scans',(req,res)=>res.json({items:listScanSessions(req.userAddress!)}));
@@ -115,6 +119,11 @@ export function createServer() {
 function parseAssetType(value:unknown):ScanAssetType|null {
   const normalized=String(value??'ERC20').toUpperCase();
   return normalized==='ERC20'||normalized==='ERC721'||normalized==='BOTH'?normalized:null;
+}
+
+function resolveChain(value:unknown) {
+  const key=String(value??'robinhood');
+  return chainOptions().find(chain=>chain.key===key&&chain.enabled)??null;
 }
 
 function isOriginAllowed(origin: string) {

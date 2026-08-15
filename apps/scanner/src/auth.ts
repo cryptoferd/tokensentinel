@@ -17,7 +17,7 @@ export function createChallenge(addressRaw:string) {
   const address=getAddress(addressRaw);
   const nonce=randomBytes(18).toString('hex');
   const issuedAt=new Date().toISOString();
-  const message=`Robinhood Token Sentinel\n\nSign in with wallet: ${address}\nThis request will not trigger a blockchain transaction.\n\nNonce: ${nonce}\nIssued at: ${issuedAt}`;
+  const message=`Multichain Token Sentinel\n\nSign in with wallet: ${address}\nThis request will not trigger a blockchain transaction.\n\nNonce: ${nonce}\nIssued at: ${issuedAt}`;
   saveChallenge(address,message,Date.now()+config.AUTH_CHALLENGE_TTL_MINUTES*60_000);
   return { address, message, expiresInMinutes:config.AUTH_CHALLENGE_TTL_MINUTES };
 }

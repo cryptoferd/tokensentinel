@@ -1,12 +1,13 @@
 import type { Holder } from '@sentinel/shared';
 import { zeroAddress } from 'viem';
-import { client } from '../chain/client.js';
+import { getClient } from '../chain/chains.js';
 import { transferEvent } from '../chain/abis.js';
 import { config } from '../config.js';
 
 const DEAD = '0x000000000000000000000000000000000000dead';
 
-export async function analyzeHolders(token: `0x${string}`, deploymentBlock: bigint, latestBlock: bigint, totalSupply: bigint, poolAddresses: string[]) {
+export async function analyzeHolders(chainKey:string,token: `0x${string}`, deploymentBlock: bigint, latestBlock: bigint, totalSupply: bigint, poolAddresses: string[]) {
+  const client=getClient(chainKey);
   const balances = new Map<string, bigint>();
   const fromBlock = deploymentBlock > BigInt(config.HOLDER_LOOKBACK_BLOCKS) && deploymentBlock < latestBlock - BigInt(config.HOLDER_LOOKBACK_BLOCKS)
     ? latestBlock - BigInt(config.HOLDER_LOOKBACK_BLOCKS) : deploymentBlock;

@@ -1,4 +1,4 @@
-import type { ScanAssetType, ScanSession, Stats, TokenFilters, TokenRecord } from '@sentinel/shared';
+import type { ChainOption, ScanAssetType, ScanSession, Stats, TokenFilters, TokenRecord } from '@sentinel/shared';
 export const API=(import.meta.env.VITE_API_URL||'http://localhost:8787').replace(/\/$/,'');
 const SESSION_KEY='sentinel_wallet_session';
 export const getSessionToken=()=>localStorage.getItem(SESSION_KEY);
@@ -19,12 +19,13 @@ export const authNonce=(address:string)=>request<{message:string}>('/api/auth/no
 export const authVerify=(address:string,signature:string)=>request<{token:string;address:string;balance:string;expiresAt:number}>('/api/auth/verify',{method:'POST',body:JSON.stringify({address,signature})});
 export const authMe=()=>request<{address:string;collection:string;contract:string}>('/api/auth/me');
 export const logout=()=>request('/api/auth/logout',{method:'POST'}).finally(clearSessionToken);
-export const fetchStats=()=>request<Stats>('/api/stats');
-export const fetchToken=(address:string)=>request<TokenRecord>(`/api/tokens/${address}`);
-export const rescan=(address:string)=>request(`/api/tokens/${address}/rescan`,{method:'POST'});
-export const startScanner=(durationMinutes:number,assetType:ScanAssetType)=>request<{scan:ScanSession}>('/api/scanner/start',{method:'POST',body:JSON.stringify({durationMinutes,assetType})});
+export const fetchChains=()=>request<{items:ChainOption[]}>('/api/chains').then(value=>value.items);
+export const fetchStats=(chainKey:string)=>request<Stats>(`/api/stats?chainKey=${encodeURIComponent(chainKey)}`);
+export const fetchToken=(chainKey:string,address:string)=>request<TokenRecord>(`/api/tokens/${address}?chainKey=${encodeURIComponent(chainKey)}`);
+export const rescan=(chainKey:string,address:string)=>request(`/api/tokens/${address}/rescan?chainKey=${encodeURIComponent(chainKey)}`,{method:'POST'});
+export const startScanner=(durationMinutes:number,assetType:ScanAssetType,chainKey:string)=>request<{scan:ScanSession}>('/api/scanner/start',{method:'POST',body:JSON.stringify({durationMinutes,assetType,chainKey})});
 export const stopScanner=(scanId?:string)=>request('/api/scanner/stop',{method:'POST',body:JSON.stringify({scanId})});
-export const startHistoryScan=(lookbackMinutes:number,assetType:ScanAssetType)=>request<{scan:ScanSession}>('/api/scans/history',{method:'POST',body:JSON.stringify({lookbackMinutes,assetType})});
+export const startHistoryScan=(lookbackMinutes:number,assetType:ScanAssetType,chainKey:string)=>request<{scan:ScanSession}>('/api/scans/history',{method:'POST',body:JSON.stringify({lookbackMinutes,assetType,chainKey})});
 export const fetchScans=()=>request<{items:ScanSession[]}>('/api/scans').then(value=>value.items);
 export const deleteScan=(scanId:string)=>request<{deleted:boolean;id:string}>(`/api/scans/${scanId}`,{method:'DELETE'});
 export async function fetchScanResults(scanId:string,filters:TokenFilters={}) {

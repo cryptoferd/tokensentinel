@@ -8,14 +8,15 @@ const queued = new Set<string>();
 let active = 0;
 
 export function queueDepth() { return queued.size + active; }
-export function enqueueAnalysis(address: string) {
+export function enqueueAnalysis(chainKey:string,address: string) {
   address = address.toLowerCase();
-  if (queued.has(address)) return;
-  queued.add(address);
+  const key=`${chainKey}:${address}`;
+  if (queued.has(key)) return;
+  queued.add(key);
   publish('queue', { depth: queueDepth() });
   void limit(async () => {
-    queued.delete(address); active++;
-    try { await analyzeToken(address); }
+    queued.delete(key); active++;
+    try { await analyzeToken(chainKey,address); }
     finally { active--; publish('queue', { depth: queueDepth() }); }
   });
 }

@@ -1,4 +1,4 @@
-import { config } from '../config.js';
+import { getChain } from '../chain/chains.js';
 
 export interface SourceInfo {
   verified: boolean;
@@ -9,8 +9,10 @@ export interface SourceInfo {
   implementation: string | null;
 }
 
-export async function getSourceInfo(address: string): Promise<SourceInfo> {
-  const url = new URL(config.BLOCKSCOUT_API_URL);
+export async function getSourceInfo(chainKey:string,address: string): Promise<SourceInfo> {
+  const apiUrl=getChain(chainKey).blockscoutApiUrl;
+  if(!apiUrl)return {verified:false,source:null,abi:null,contractName:null,proxy:null,implementation:null};
+  const url = new URL(apiUrl);
   url.searchParams.set('module', 'contract');
   url.searchParams.set('action', 'getsourcecode');
   url.searchParams.set('address', address);

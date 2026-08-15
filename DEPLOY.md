@@ -20,6 +20,7 @@ Create an empty GitHub repository and upload the contents of this project so tha
 3. Add these recommended variables:
 
    ```text
+   ALCHEMY_API_KEY=YOUR_ALCHEMY_API_KEY
    RPC_URL=https://rpc.mainnet.chain.robinhood.com
    CHAIN_ID=4663
    CORS_ORIGINS=https://*.vercel.app
@@ -53,10 +54,10 @@ The public default is suitable for light use; a dedicated Ethereum provider is
 recommended if login traffic grows. Never place an RPC key in Vercel—the
 ownership check runs only on Railway.
 
-Historical 5m–24h searches use Robinhood Blockscout's indexed transaction feed,
-so they do not require the scanner to have been running continuously. Dexscreener
-enrichment supplies market-cap and liquidity values when a token has an indexed
-Robinhood trading pair.
+Historical 5m–24h searches use Alchemy to locate and scan the selected chain's
+block range concurrently, so they do not require the scanner to have been
+running continuously. Keep `ALCHEMY_API_KEY` only on Railway, never in Vercel.
+Dexscreener enrichment follows the selected network when indexed pairs exist.
 
 ## 3. Deploy the dashboard to Vercel
 
@@ -118,5 +119,5 @@ Once both services are linked to GitHub:
 | Browser reports a CORS error | Add the exact Vercel origin to Railway `CORS_ORIGINS` and redeploy Railway. |
 | Scanner starts over after redeploy | Attach a volume at `/data` and leave `DB_PATH` unset, or set `DB_PATH=/data/sentinel.db`. |
 | Wallet signs but access is denied | Confirm the connected wallet holds a Croikey on Ethereum mainnet and that Railway can reach `GATE_RPC_URL`. |
-| A 24h history job hits its safety limit | Raise `MAX_HISTORICAL_TRANSACTIONS` on Railway or use a shorter window. |
+| A 24h history job hits its safety limit | Raise `MAX_HISTORICAL_BLOCKS` on Railway or use a shorter window. |
 | Railway repeatedly restarts | Check RPC reachability and ensure the service has only one replica when using SQLite. |

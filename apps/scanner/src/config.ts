@@ -3,6 +3,7 @@ import path from 'node:path';
 import { z } from 'zod';
 
 const envSchema = z.object({
+  ALCHEMY_API_KEY: z.string().default(''),
   RPC_URL: z.string().url().default('https://rpc.mainnet.chain.robinhood.com'),
   CHAIN_ID: z.coerce.number().int().positive().default(4663),
   BLOCKSCOUT_API_URL: z.string().url().default('https://robinhoodchain.blockscout.com/api'),
@@ -25,8 +26,8 @@ const envSchema = z.object({
   GATE_CONTRACT_ADDRESS: z.string().regex(/^0x[a-fA-F0-9]{40}$/).default('0x3b70a5eae51db90bad7e4083341e0c2c0b74dae4'),
   SESSION_TTL_HOURS: z.coerce.number().int().min(1).max(720).default(168),
   AUTH_CHALLENGE_TTL_MINUTES: z.coerce.number().int().min(1).max(60).default(10),
-  MAX_HISTORICAL_TRANSACTIONS: z.coerce.number().int().min(1000).max(1000000).default(250000),
-  HISTORICAL_CONCURRENCY: z.coerce.number().int().min(1).max(12).default(4),
+  HISTORICAL_CONCURRENCY: z.coerce.number().int().min(1).max(12).default(8),
+  MAX_HISTORICAL_BLOCKS: z.coerce.number().int().min(100).max(1000000).default(400000),
   DEX_V2_FACTORIES: z.string().default(''),
   DEX_V3_FACTORIES: z.string().default(''),
   KNOWN_ROUTERS: z.string().default(''),

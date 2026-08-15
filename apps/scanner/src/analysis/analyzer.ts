@@ -1,6 +1,6 @@
 import type { Warning } from '@sentinel/shared';
 import { zeroAddress } from 'viem';
-import { client } from '../chain/client.js';
+import { getClient } from '../chain/chains.js';
 import { erc165Abi, erc20Abi } from '../chain/abis.js';
 import { getSourceInfo } from './blockscout.js';
 import { analyzeSource } from './staticRisk.js';
@@ -12,7 +12,8 @@ import { scoreRisk } from './riskScore.js';
 import { publish } from '../events.js';
 import { getMarketData } from './marketData.js';
 
-export async function readDeploymentMetadata(address: `0x${string}`) {
+export async function readDeploymentMetadata(chainKey:string,address: `0x${string}`) {
+  const client=getClient(chainKey);
   const isErc721 = await client.readContract({ address, abi:erc165Abi, functionName:'supportsInterface', args:['0x80ac58cd'] }).catch(() => false);
   const common = await Promise.allSettled([
     client.readContract({ address, abi: erc20Abi, functionName:'name' }),
@@ -27,21 +28,23 @@ export async function readDeploymentMetadata(address: `0x${string}`) {
   return { assetType:'ERC20' as const, name, symbol, decimals:Number(decimalsRaw), totalSupply };
 }
 
-async function readOwner(address: `0x${string}`) {
+async function readOwner(chainKey:string,address: `0x${string}`) {
+  const client=getClient(chainKey);
   try { return await client.readContract({ address, abi: erc20Abi, functionName:'owner' }) as `0x${string}`; } catch { return null; }
 }
 
-export async function analyzeToken(addressRaw: string) {
+export async function analyzeToken(chainKey:string,addressRaw: string) {
+  const client=getClient(chainKey);
   const address = addressRaw.toLowerCase() as `0x${string}`;
-  const token = getToken(address);
+  const token = getToken(chainKey,address);
   if (!token) return;
-  updateToken(address, { analysisState:'analyzing' }); publish('token:update', { address, analysisState:'analyzing' });
+  updateToken(chainKey,address, { analysisState:'analyzing' }); publish('token:update', { chainKey,address, analysisState:'analyzing' });
   const warnings: Warning[] = [];
   try {
-    const metadata=await readDeploymentMetadata(address);
+    const metadata=await readDeploymentMetadata(chainKey,address);
     const assetType=metadata?.assetType??token.assetType;
-    if(metadata)updateToken(address,{assetType,name:metadata.name,symbol:metadata.symbol,decimals:metadata.decimals,totalSupply:metadata.totalSupply?.toString()??null});
-    const [code, source, owner] = await Promise.all([client.getBytecode({ address }), getSourceInfo(address), readOwner(address)]);
+    if(metadata)updateToken(chainKey,address,{assetType,name:metadata.name,symbol:metadata.symbol,decimals:metadata.decimals,totalSupply:metadata.totalSupply?.toString()??null});
+    const [code, source, owner] = await Promise.all([client.getBytecode({ address }), getSourceInfo(chainKey,address), readOwner(chainKey,address)]);
     const flags = scanOpcodes(code);
     const minimalProxy = looksLikeMinimalProxy(code);
     warnings.push(...analyzeSource(source.source, source.abi));
@@ -50,13 +53,13 @@ export async function analyzeToken(addressRaw: string) {
     if (minimalProxy || source.proxy) warnings.push({ code:'PROXY', title:'Proxy/upgradeability detected', severity:'high', detail: source.implementation ? `Contract is reported as a proxy with implementation ${source.implementation}.` : 'Proxy-like runtime bytecode or explorer metadata was detected.' });
     if (!source.verified) warnings.push({ code:'UNVERIFIED', title:'Source code not verified', severity:'medium', detail:'Blockscout did not return verified source code, reducing the depth of static review.' });
     if (owner && owner !== zeroAddress) warnings.push({ code:'OWNER_ACTIVE', title:'Privileged owner is active', severity:'medium', detail:`owner() currently returns ${owner}. Ownership has not been renounced.` });
-    const taxes = assetType==='ERC20' ? await probeTaxes(address, source.abi) : {buyTax:null,sellTax:null,warnings:[]}; warnings.push(...taxes.warnings);
+    const taxes = assetType==='ERC20' ? await probeTaxes(chainKey,address, source.abi) : {buyTax:null,sellTax:null,warnings:[]}; warnings.push(...taxes.warnings);
 
-    const current=getToken(address)??token;
+    const current=getToken(chainKey,address)??token;
     const poolAddresses = current.pools.map(p => p.address);
     let holderResult = null;
     if (assetType==='ERC20' && current.totalSupply) {
-      try { holderResult = await analyzeHolders(address, BigInt(current.deploymentBlock), await client.getBlockNumber(), BigInt(current.totalSupply), poolAddresses); }
+      try { holderResult = await analyzeHolders(chainKey,address, BigInt(current.deploymentBlock), await client.getBlockNumber(), BigInt(current.totalSupply), poolAddresses); }
       catch (e) { warnings.push({ code:'HOLDER_PARTIAL', title:'Holder analysis incomplete', severity:'info', detail:`Transfer-log holder reconstruction could not complete: ${e instanceof Error ? e.message : String(e)}` }); }
     }
     if (holderResult?.truncated) warnings.push({ code:'HOLDER_TRUNCATED', title:'Holder data is partial', severity:'info', detail:'Transfer-log reconstruction hit its configured lookback/log limit. Concentration figures may be incomplete.' });
@@ -66,20 +69,20 @@ export async function analyzeToken(addressRaw: string) {
     else if (concentration != null && concentration >= 30) warnings.push({ code:'TOP5_MODERATE', title:'Concentrated ownership', severity:'medium', detail:`Top five circulating holders control approximately ${concentration.toFixed(2)}% of reconstructed circulating balances.` });
 
     const result = scoreRisk(warnings);
-    const market=assetType==='ERC20' ? await getMarketData(address) : {marketCapUsd:null,liquidityUsd:null,pair:null};
-    if(market.pair)upsertPool({...market.pair,factory:null,fee:null,createdBlock:null,createdTx:null});
-    updateToken(address, {
+    const market=assetType==='ERC20' ? await getMarketData(chainKey,address) : {marketCapUsd:null,liquidityUsd:null,pair:null};
+    if(market.pair)upsertPool(chainKey,{...market.pair,factory:null,fee:null,createdBlock:null,createdTx:null});
+    updateToken(chainKey,address, {
       assetType, analysisState: source.verified ? 'complete' : 'partial', riskScore: result.score, riskLabel: result.label, warnings: result.warnings,
       verified: source.verified, sourceAvailable: Boolean(source.source), owner, ownershipRenounced: owner ? owner === zeroAddress : null, buyTax: taxes.buyTax, sellTax: taxes.sellTax,
       top5Percent: holderResult?.top5Percent ?? null, circulatingTop5Percent: holderResult?.circulatingTop5Percent ?? null,
       holderCountEstimate: holderResult?.holderCountEstimate ?? null, marketCapUsd:market.marketCapUsd, liquidityUsd:market.liquidityUsd,
       topHolders: holderResult?.holders ?? [], bytecodeFlags: flags, updatedAt: Date.now()
     });
-    publish('token:update', getToken(address));
+    publish('token:update', getToken(chainKey,address));
   } catch (e) {
     warnings.push({ code:'ANALYSIS_ERROR', title:'Analysis error', severity:'info', detail:e instanceof Error ? e.message : String(e) });
     const result = scoreRisk(warnings);
-    updateToken(address, { analysisState:'failed', warnings:result.warnings, riskScore:result.score, riskLabel:result.label, updatedAt:Date.now() });
-    publish('token:update', getToken(address));
+    updateToken(chainKey,address, { analysisState:'failed', warnings:result.warnings, riskScore:result.score, riskLabel:result.label, updatedAt:Date.now() });
+    publish('token:update', getToken(chainKey,address));
   }
 }

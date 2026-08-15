@@ -1,4 +1,4 @@
-import type { AnalysisState, Holder, PoolInfo, ScanAssetType, ScanSession, TokenFilters, TokenRecord, Warning } from '@sentinel/shared';
+import type { AnalysisState, ChainOption, Holder, PoolInfo, ScanAssetType, ScanSession, TokenFilters, TokenRecord, Warning } from '@sentinel/shared';
 import { db } from './database.js';
 
 const bool = (v: unknown): boolean | null => v === null || v === undefined ? null : Number(v) === 1;
@@ -12,11 +12,11 @@ export function setState(key: string, value: string) {
   db.prepare('INSERT INTO state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run(key, value);
 }
 
-export function upsertToken(input: Partial<TokenRecord> & Pick<TokenRecord, 'address' | 'deploymentBlock' | 'firstSeenAt'>) {
+export function upsertToken(input: Partial<TokenRecord> & Pick<TokenRecord, 'chainKey'|'chainId'|'chainName'|'explorerUrl'|'address' | 'deploymentBlock' | 'firstSeenAt'>) {
   const now = Date.now();
-  db.prepare(`INSERT INTO tokens(address,asset_type,name,symbol,decimals,total_supply,deployer,deployment_tx,deployment_block,first_seen_at,analysis_state,risk_score,risk_label,verified,source_available,owner,ownership_renounced,buy_tax,sell_tax,top5_percent,circulating_top5_percent,holder_count_estimate,market_cap_usd,liquidity_usd,warnings_json,bytecode_flags_json,top_holders_json,updated_at)
-  VALUES(@address,@assetType,@name,@symbol,@decimals,@totalSupply,@deployer,@deploymentTx,@deploymentBlock,@firstSeenAt,@analysisState,@riskScore,@riskLabel,@verified,@sourceAvailable,@owner,@ownershipRenounced,@buyTax,@sellTax,@top5Percent,@circulatingTop5Percent,@holderCountEstimate,@marketCapUsd,@liquidityUsd,@warnings,@flags,@holders,@updatedAt)
-  ON CONFLICT(address) DO UPDATE SET
+  db.prepare(`INSERT INTO tokens(chain_key,chain_id,chain_name,explorer_url,address,asset_type,name,symbol,decimals,total_supply,deployer,deployment_tx,deployment_block,first_seen_at,analysis_state,risk_score,risk_label,verified,source_available,owner,ownership_renounced,buy_tax,sell_tax,top5_percent,circulating_top5_percent,holder_count_estimate,market_cap_usd,liquidity_usd,warnings_json,bytecode_flags_json,top_holders_json,updated_at)
+  VALUES(@chainKey,@chainId,@chainName,@explorerUrl,@address,@assetType,@name,@symbol,@decimals,@totalSupply,@deployer,@deploymentTx,@deploymentBlock,@firstSeenAt,@analysisState,@riskScore,@riskLabel,@verified,@sourceAvailable,@owner,@ownershipRenounced,@buyTax,@sellTax,@top5Percent,@circulatingTop5Percent,@holderCountEstimate,@marketCapUsd,@liquidityUsd,@warnings,@flags,@holders,@updatedAt)
+  ON CONFLICT(chain_key,address) DO UPDATE SET
     asset_type=excluded.asset_type, name=COALESCE(excluded.name,tokens.name), symbol=COALESCE(excluded.symbol,tokens.symbol), decimals=CASE WHEN excluded.asset_type='ERC721' THEN NULL ELSE COALESCE(excluded.decimals,tokens.decimals) END,
     total_supply=COALESCE(excluded.total_supply,tokens.total_supply), deployer=COALESCE(excluded.deployer,tokens.deployer), deployment_tx=COALESCE(excluded.deployment_tx,tokens.deployment_tx),
     analysis_state=excluded.analysis_state, risk_score=excluded.risk_score, risk_label=excluded.risk_label, verified=COALESCE(excluded.verified,tokens.verified),
@@ -24,7 +24,7 @@ export function upsertToken(input: Partial<TokenRecord> & Pick<TokenRecord, 'add
     top5_percent=CASE WHEN excluded.asset_type='ERC721' THEN NULL ELSE COALESCE(excluded.top5_percent,tokens.top5_percent) END, circulating_top5_percent=CASE WHEN excluded.asset_type='ERC721' THEN NULL ELSE COALESCE(excluded.circulating_top5_percent,tokens.circulating_top5_percent) END,
     holder_count_estimate=CASE WHEN excluded.asset_type='ERC721' THEN NULL ELSE COALESCE(excluded.holder_count_estimate,tokens.holder_count_estimate) END, market_cap_usd=CASE WHEN excluded.asset_type='ERC721' THEN NULL ELSE COALESCE(excluded.market_cap_usd,tokens.market_cap_usd) END, liquidity_usd=CASE WHEN excluded.asset_type='ERC721' THEN NULL ELSE COALESCE(excluded.liquidity_usd,tokens.liquidity_usd) END, warnings_json=excluded.warnings_json, bytecode_flags_json=excluded.bytecode_flags_json,
     top_holders_json=excluded.top_holders_json, updated_at=excluded.updated_at`).run({
-      address: input.address.toLowerCase(), assetType: input.assetType ?? 'ERC20', name: input.name ?? null, symbol: input.symbol ?? null, decimals: input.decimals ?? null,
+      chainKey:input.chainKey,chainId:input.chainId,chainName:input.chainName,explorerUrl:input.explorerUrl,address: input.address.toLowerCase(), assetType: input.assetType ?? 'ERC20', name: input.name ?? null, symbol: input.symbol ?? null, decimals: input.decimals ?? null,
       totalSupply: input.totalSupply ?? null, deployer: input.deployer?.toLowerCase() ?? null, deploymentTx: input.deploymentTx ?? null,
       deploymentBlock: input.deploymentBlock, firstSeenAt: input.firstSeenAt, analysisState: input.analysisState ?? 'queued', riskScore: input.riskScore ?? 0,
       riskLabel: input.riskLabel ?? 'LOW', verified: input.verified == null ? null : Number(input.verified), sourceAvailable: input.sourceAvailable == null ? null : Number(input.sourceAvailable),
@@ -33,30 +33,30 @@ export function upsertToken(input: Partial<TokenRecord> & Pick<TokenRecord, 'add
       warnings: JSON.stringify(input.warnings ?? []), flags: JSON.stringify(input.bytecodeFlags ?? []), holders: JSON.stringify(input.topHolders ?? []), updatedAt: input.updatedAt ?? now
     });
   const assetType=input.assetType??'ERC20';
-  db.prepare(`DELETE FROM scan_results WHERE token_address=? AND EXISTS (
+  db.prepare(`DELETE FROM scan_results WHERE chain_key=? AND token_address=? AND EXISTS (
     SELECT 1 FROM scan_sessions s WHERE s.id=scan_results.scan_id AND s.asset_type!='BOTH' AND s.asset_type!=?
-  )`).run(input.address.toLowerCase(),assetType);
+  )`).run(input.chainKey,input.address.toLowerCase(),assetType);
 }
 
-export function updateToken(address: string, patch: Partial<TokenRecord>) {
-  const existing = getToken(address);
+export function updateToken(chainKey:string,address: string, patch: Partial<TokenRecord>) {
+  const existing = getToken(chainKey,address);
   if (!existing) return;
   upsertToken({ ...existing, ...patch, address: existing.address, deploymentBlock: existing.deploymentBlock, firstSeenAt: existing.firstSeenAt });
 }
 
-export function upsertPool(pool: PoolInfo) {
-  db.prepare(`INSERT INTO pools(address,factory,protocol,token0,token1,fee,created_block,created_tx,created_at)
-  VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(address) DO UPDATE SET factory=excluded.factory,protocol=excluded.protocol,token0=excluded.token0,token1=excluded.token1,fee=excluded.fee,created_block=excluded.created_block,created_tx=excluded.created_tx`).run(
-    pool.address.toLowerCase(), pool.factory?.toLowerCase() ?? null, pool.protocol, pool.token0?.toLowerCase() ?? null, pool.token1?.toLowerCase() ?? null, pool.fee ?? null, pool.createdBlock ?? null, pool.createdTx ?? null, Date.now()
+export function upsertPool(chainKey:string,pool: PoolInfo) {
+  db.prepare(`INSERT INTO pools(chain_key,address,factory,protocol,token0,token1,fee,created_block,created_tx,created_at)
+  VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(chain_key,address) DO UPDATE SET factory=excluded.factory,protocol=excluded.protocol,token0=excluded.token0,token1=excluded.token1,fee=excluded.fee,created_block=excluded.created_block,created_tx=excluded.created_tx`).run(
+    chainKey,pool.address.toLowerCase(), pool.factory?.toLowerCase() ?? null, pool.protocol, pool.token0?.toLowerCase() ?? null, pool.token1?.toLowerCase() ?? null, pool.fee ?? null, pool.createdBlock ?? null, pool.createdTx ?? null, Date.now()
   );
 }
 
 function rowToToken(r: any): TokenRecord {
-  const pools = db.prepare('SELECT * FROM pools WHERE token0=? OR token1=? ORDER BY created_block DESC').all(r.address, r.address).map((p: any) => ({
+  const pools = db.prepare('SELECT * FROM pools WHERE chain_key=? AND (token0=? OR token1=?) ORDER BY created_block DESC').all(r.chain_key,r.address, r.address).map((p: any) => ({
     address: p.address, factory: p.factory, protocol: p.protocol, token0: p.token0, token1: p.token1, fee: p.fee, createdBlock: p.created_block, createdTx: p.created_tx
   })) as PoolInfo[];
   return {
-    address: r.address, assetType: r.asset_type === 'ERC721' ? 'ERC721' : 'ERC20', name: r.name, symbol: r.symbol, decimals: r.decimals, totalSupply: r.total_supply, deployer: r.deployer, deploymentTx: r.deployment_tx,
+    chainKey:r.chain_key,chainId:r.chain_id,chainName:r.chain_name,explorerUrl:r.explorer_url,address: r.address, assetType: r.asset_type === 'ERC721' ? 'ERC721' : 'ERC20', name: r.name, symbol: r.symbol, decimals: r.decimals, totalSupply: r.total_supply, deployer: r.deployer, deploymentTx: r.deployment_tx,
     deploymentBlock: r.deployment_block, firstSeenAt: r.first_seen_at, analysisState: r.analysis_state as AnalysisState, riskScore: r.risk_score, riskLabel: r.risk_label,
     verified: bool(r.verified), sourceAvailable: bool(r.source_available), owner: r.owner, ownershipRenounced: bool(r.ownership_renounced), buyTax: r.buy_tax, sellTax: r.sell_tax, top5Percent: r.top5_percent,
     circulatingTop5Percent: r.circulating_top5_percent, holderCountEstimate: r.holder_count_estimate, marketCapUsd: r.market_cap_usd, liquidityUsd: r.liquidity_usd, poolCreated: pools.length > 0, pools,
@@ -64,12 +64,13 @@ function rowToToken(r: any): TokenRecord {
   };
 }
 
-export function getToken(address: string): TokenRecord | null {
-  const row = db.prepare('SELECT * FROM tokens WHERE address=?').get(address.toLowerCase());
+export function getToken(chainKey:string,address: string): TokenRecord | null {
+  const row = db.prepare('SELECT * FROM tokens WHERE chain_key=? AND address=?').get(chainKey,address.toLowerCase());
   return row ? rowToToken(row) : null;
 }
-export function listTokens(opts: { limit: number; offset: number; risk?: string; q?: string }) {
+export function listTokens(opts: { limit: number; offset: number; chainKey?:string; risk?: string; q?: string }) {
   const where: string[] = []; const params: any[] = [];
+  if(opts.chainKey){where.push('chain_key=?');params.push(opts.chainKey);}
   if (opts.risk) { where.push('risk_label=?'); params.push(opts.risk.toUpperCase()); }
   if (opts.q) { where.push('(address LIKE ? OR name LIKE ? OR symbol LIKE ?)'); const q = `%${opts.q}%`; params.push(q,q,q); }
   const sql = `SELECT * FROM tokens ${where.length ? 'WHERE '+where.join(' AND ') : ''} ORDER BY deployment_block DESC, first_seen_at DESC LIMIT ? OFFSET ?`;
@@ -89,13 +90,13 @@ function filterSql(filters: TokenFilters, alias = 't') {
   if (filters.maxTop5 != null) { where.push(`${alias}.circulating_top5_percent<=?`); params.push(filters.maxTop5); }
   if (filters.maxBuyTax != null) { where.push(`${alias}.buy_tax<=?`); params.push(filters.maxBuyTax); }
   if (filters.maxSellTax != null) { where.push(`${alias}.sell_tax<=?`); params.push(filters.maxSellTax); }
-  if (filters.hasLiquidity != null) where.push(`${filters.hasLiquidity ? 'EXISTS' : 'NOT EXISTS'} (SELECT 1 FROM pools p WHERE p.token0=${alias}.address OR p.token1=${alias}.address)`);
+  if (filters.hasLiquidity != null) where.push(`${filters.hasLiquidity ? 'EXISTS' : 'NOT EXISTS'} (SELECT 1 FROM pools p WHERE p.chain_key=${alias}.chain_key AND (p.token0=${alias}.address OR p.token1=${alias}.address))`);
   return { where, params };
 }
 
 export function listScanTokens(scanId: string, userAddress: string, filters: TokenFilters, limit: number, offset: number) {
   const built = filterSql(filters);
-  const sql = `SELECT t.* FROM scan_results sr JOIN scan_sessions s ON s.id=sr.scan_id JOIN tokens t ON t.address=sr.token_address
+  const sql = `SELECT t.* FROM scan_results sr JOIN scan_sessions s ON s.id=sr.scan_id JOIN tokens t ON t.chain_key=sr.chain_key AND t.address=sr.token_address
     WHERE sr.scan_id=? AND s.user_address=? ${built.where.length ? `AND ${built.where.join(' AND ')}` : ''}
     ORDER BY t.deployment_block DESC, t.first_seen_at DESC LIMIT ? OFFSET ?`;
   return (db.prepare(sql).all(scanId, userAddress.toLowerCase(), ...built.params, limit, offset) as any[]).map(rowToToken);
@@ -123,13 +124,13 @@ export function getAuthSession(tokenHash: string) {
 export function deleteAuthSession(tokenHash: string) { db.prepare('DELETE FROM auth_sessions WHERE token_hash=?').run(tokenHash); }
 
 function rowToScan(r: any): ScanSession {
-  return { id:r.id, userAddress:r.user_address, mode:r.mode, assetType:['ERC20','ERC721','BOTH'].includes(r.asset_type) ? r.asset_type : 'ERC20', durationMinutes:r.duration_minutes, lookbackMinutes:r.lookback_minutes,
+  return { id:r.id, userAddress:r.user_address, mode:r.mode, assetType:['ERC20','ERC721','BOTH'].includes(r.asset_type) ? r.asset_type : 'ERC20', chainKey:r.chain_key??'robinhood',chainId:r.chain_id??4663,chainName:r.chain_name??'Robinhood Chain',explorerUrl:r.explorer_url??'https://robinhoodchain.blockscout.com',durationMinutes:r.duration_minutes, lookbackMinutes:r.lookback_minutes,
     startedAt:r.started_at, endsAt:r.ends_at, completedAt:r.completed_at, status:r.status, fromBlock:r.from_block, toBlock:r.to_block,
     scannedBlocks:r.scanned_blocks, totalBlocks:r.total_blocks, resultCount:r.result_count ?? 0, error:r.error };
 }
-export function createScanSession(input: { id:string; userAddress:string; mode:'live'|'history'; assetType?:ScanAssetType; durationMinutes?:number; lookbackMinutes?:number; endsAt?:number }) {
-  db.prepare(`INSERT INTO scan_sessions(id,user_address,mode,asset_type,duration_minutes,lookback_minutes,started_at,ends_at,status) VALUES(?,?,?,?,?,?,?,?,'running')`).run(
-    input.id, input.userAddress.toLowerCase(), input.mode, input.assetType ?? 'ERC20', input.durationMinutes ?? null, input.lookbackMinutes ?? null, Date.now(), input.endsAt ?? null
+export function createScanSession(input: { id:string; userAddress:string; mode:'live'|'history'; assetType?:ScanAssetType; chain:ChainOption; durationMinutes?:number; lookbackMinutes?:number; endsAt?:number }) {
+  db.prepare(`INSERT INTO scan_sessions(id,user_address,mode,asset_type,chain_key,chain_id,chain_name,explorer_url,duration_minutes,lookback_minutes,started_at,ends_at,status) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,'running')`).run(
+    input.id, input.userAddress.toLowerCase(), input.mode, input.assetType ?? 'ERC20',input.chain.key,input.chain.id,input.chain.name,input.chain.explorerUrl,input.durationMinutes ?? null, input.lookbackMinutes ?? null, Date.now(), input.endsAt ?? null
   );
   return getScanSession(input.id, input.userAddress)!;
 }
@@ -160,15 +161,15 @@ export function updateScanSession(id:string, patch:{ status?:string; completedAt
 }
 export function attachTokenToScan(scanId:string, tokenAddress:string) {
   const address=tokenAddress.toLowerCase();
-  db.prepare(`INSERT OR IGNORE INTO scan_results(scan_id,token_address,discovered_at)
-    SELECT ?,?,? WHERE EXISTS (SELECT 1 FROM scan_sessions s JOIN tokens t ON t.address=? WHERE s.id=? AND (s.asset_type='BOTH' OR s.asset_type=t.asset_type))`).run(scanId,address,Date.now(),address,scanId);
+  db.prepare(`INSERT OR IGNORE INTO scan_results(scan_id,chain_key,token_address,discovered_at)
+    SELECT s.id,s.chain_key,?,? FROM scan_sessions s JOIN tokens t ON t.chain_key=s.chain_key AND t.address=? WHERE s.id=? AND (s.asset_type='BOTH' OR s.asset_type=t.asset_type)`).run(address,Date.now(),address,scanId);
 }
-export function attachTokenToActiveLiveScans(tokenAddress:string) {
+export function attachTokenToActiveLiveScans(chainKey:string,tokenAddress:string) {
   expireLiveScans();
   const address=tokenAddress.toLowerCase();
-  const rows=db.prepare("SELECT s.id FROM scan_sessions s JOIN tokens t ON t.address=? WHERE s.mode='live' AND s.status='running' AND s.ends_at>? AND (s.asset_type='BOTH' OR s.asset_type=t.asset_type)").all(address,Date.now()) as Array<{id:string}>;
-  const insert=db.prepare('INSERT OR IGNORE INTO scan_results(scan_id,token_address,discovered_at) VALUES(?,?,?)');
-  db.transaction(()=>rows.forEach(row=>insert.run(row.id,address,Date.now())))();
+  const rows=db.prepare("SELECT s.id FROM scan_sessions s JOIN tokens t ON t.chain_key=s.chain_key AND t.address=? WHERE s.chain_key=? AND s.mode='live' AND s.status='running' AND s.ends_at>? AND (s.asset_type='BOTH' OR s.asset_type=t.asset_type)").all(address,chainKey,Date.now()) as Array<{id:string}>;
+  const insert=db.prepare('INSERT OR IGNORE INTO scan_results(scan_id,chain_key,token_address,discovered_at) VALUES(?,?,?,?)');
+  db.transaction(()=>rows.forEach(row=>insert.run(row.id,chainKey,address,Date.now())))();
 }
 export function expireLiveScans() {
   db.prepare("UPDATE scan_sessions SET status='complete',completed_at=COALESCE(completed_at,ends_at) WHERE mode='live' AND status='running' AND ends_at<=?").run(Date.now());
@@ -177,9 +178,9 @@ export function stopLiveScan(id:string,userAddress:string) {
   const result=db.prepare("UPDATE scan_sessions SET status='stopped',completed_at=? WHERE id=? AND user_address=? AND mode='live' AND status='running'").run(Date.now(),id,userAddress.toLowerCase());
   return result.changes>0;
 }
-export function latestActiveLiveEnd() {
+export function latestActiveLiveEnd(chainKey?:string) {
   expireLiveScans();
-  const row=db.prepare("SELECT MAX(ends_at) value FROM scan_sessions WHERE mode='live' AND status='running'").get() as {value:number|null};
+  const row=(chainKey?db.prepare("SELECT MAX(ends_at) value FROM scan_sessions WHERE chain_key=? AND mode='live' AND status='running'").get(chainKey):db.prepare("SELECT MAX(ends_at) value FROM scan_sessions WHERE mode='live' AND status='running'").get()) as {value:number|null};
   return row.value;
 }
 export function activeLiveScanForUser(userAddress:string) {

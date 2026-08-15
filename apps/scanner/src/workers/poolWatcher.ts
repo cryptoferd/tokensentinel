@@ -1,4 +1,4 @@
-import { client } from '../chain/client.js';
+import { getClient } from '../chain/chains.js';
 import { pairCreatedEvent, poolCreatedEvent, poolViewAbi } from '../chain/abis.js';
 import { config } from '../config.js';
 import { getToken, upsertPool } from '../db/repository.js';
@@ -6,7 +6,8 @@ import { enqueueAnalysis } from './analysisQueue.js';
 import { publish } from '../events.js';
 
 
-async function verifyPool(pool: `0x${string}`, token0: string, token1: string) {
+async function verifyPool(chainKey:string,pool: `0x${string}`, token0: string, token1: string) {
+  const client=getClient(chainKey);
   try {
     const [a,b,code] = await Promise.all([
       client.readContract({ address:pool, abi:poolViewAbi, functionName:'token0' }),
@@ -22,7 +23,8 @@ function allowed(factory: string, protocol: 'v2'|'v3') {
   return list.length === 0 || list.includes(factory.toLowerCase());
 }
 
-export async function scanPools(blockNumber: bigint) {
+export async function scanPools(chainKey:string,blockNumber: bigint) {
+  const client=getClient(chainKey);
   const [v2Logs, v3Logs] = await Promise.all([
     client.getLogs({ event: pairCreatedEvent, fromBlock:blockNumber, toBlock:blockNumber }).catch(() => []),
     client.getLogs({ event: poolCreatedEvent, fromBlock:blockNumber, toBlock:blockNumber }).catch(() => [])
@@ -35,10 +37,10 @@ export async function scanPools(blockNumber: bigint) {
       pair?: `0x${string}`;
     };
     if (!token0 || !token1 || !pair) continue;
-    if (!await verifyPool(pair, token0, token1)) continue;
+    if (!await verifyPool(chainKey,pair, token0, token1)) continue;
     const pool = { address:pair, factory, protocol:'v2' as const, token0, token1, createdBlock:Number(blockNumber), createdTx:log.transactionHash ?? null };
-    upsertPool(pool); publish('pool:new', pool);
-    for (const t of [token0, token1]) if (getToken(t)) enqueueAnalysis(t);
+    upsertPool(chainKey,pool); publish('pool:new', {...pool,chainKey});
+    for (const t of [token0, token1]) if (getToken(chainKey,t)) enqueueAnalysis(chainKey,t);
   }
   for (const log of v3Logs) {
     const factory = log.address.toLowerCase(); if (!allowed(factory,'v3')) continue;
@@ -49,9 +51,9 @@ export async function scanPools(blockNumber: bigint) {
       pool?: `0x${string}`;
     };
     if (!token0 || !token1 || !pool) continue;
-    if (!await verifyPool(pool, token0, token1)) continue;
+    if (!await verifyPool(chainKey,pool, token0, token1)) continue;
     const info = { address:pool, factory, protocol:'v3' as const, token0, token1, fee:Number(fee ?? 0), createdBlock:Number(blockNumber), createdTx:log.transactionHash ?? null };
-    upsertPool(info); publish('pool:new', info);
-    for (const t of [token0, token1]) if (getToken(t)) enqueueAnalysis(t);
+    upsertPool(chainKey,info); publish('pool:new', {...info,chainKey});
+    for (const t of [token0, token1]) if (getToken(chainKey,t)) enqueueAnalysis(chainKey,t);
   }
 }

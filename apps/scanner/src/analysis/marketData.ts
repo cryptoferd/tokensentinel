@@ -1,3 +1,4 @@
+import { getChain } from '../chain/chains.js';
 interface DexPair {
   pairAddress?:string;
   labels?:string[];
@@ -8,9 +9,9 @@ interface DexPair {
   liquidity?:{usd?:number|null}|null;
 }
 
-export async function getMarketData(address:string) {
+export async function getMarketData(chainKey:string,address:string) {
   try {
-    const response=await fetch(`https://api.dexscreener.com/token-pairs/v1/robinhood/${address}`,{headers:{Accept:'application/json'},signal:AbortSignal.timeout(12_000)});
+    const response=await fetch(`https://api.dexscreener.com/token-pairs/v1/${getChain(chainKey).dexScreenerSlug}/${address}`,{headers:{Accept:'application/json'},signal:AbortSignal.timeout(12_000)});
     if(!response.ok)return {marketCapUsd:null,liquidityUsd:null,pair:null};
     const pairs=await response.json() as DexPair[];
     if(!Array.isArray(pairs)||!pairs.length)return {marketCapUsd:null,liquidityUsd:null,pair:null};
