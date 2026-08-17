@@ -28,6 +28,7 @@ one-click template button after the repository is on GitHub.
 - Backfills launches from the last **5m, 30m, 1h, 3h, 6h, 12h or 24h** using concurrent Alchemy block-range scanning when a key is configured.
 - Adds Dexscreener market-cap/liquidity enrichment and filters for market cap, holders, concentration, liquidity and risk.
 - Adds direct DexScreener links for tokens and resolves OpenSea collection slugs for indexed NFTs.
+- Opens three no-API X investigations per result: exact contract mentions, project discussion and warning/scam searches.
 - Starts each timed session at the current chain tip and stops automatically at zero.
 - Includes an immediate manual stop control and live countdown.
 - Watches every new block during an active session for **contract-creation transactions**.
